@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Required permissions -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application>
+        <!--
+            Main WebView activity. Holds the JWT and the WebView session.
+            NEVER exported. Reached only via in-process startActivity from the
+            SDK, or via FLAG_ACTIVITY_CLEAR_TOP|FLAG_ACTIVITY_SINGLE_TOP from
+            OAuthCallbackActivity (same task, same process).
+        -->
+        <activity
+            android:name="xyz.connect.sdk.ui.WebViewActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="false"
+            android:launchMode="singleTop" />
+
+        <!--
+            F-003 / cross-process OAuth callback receiver.
+
+            This is the ONLY exported activity in the SDK. It receives the
+            connectsdk-oauth://callback redirect dispatched by the system after
+            Chrome Custom Tabs navigates to the custom scheme, and forwards the
+            URI to the (non-exported) WebViewActivity in the same task.
+
+            The activity holds no SDK state, no JWT, no callbacks — only the
+            forwarding logic.  External callers cannot use it to reach the
+            JWT-bearing activity directly.
+
+            Theme = Translucent so the user never sees a flash; excludeFromRecents
+            keeps it out of the task switcher.
+
+            NOTE on App Links: App Links (autoVerify + assetlinks.json) are NOT
+            used because this is an SDK library embedded in many partner apps.
+            App Links require listing each host app's package name and
+            signing-certificate fingerprint in a server-hosted assetlinks.json,
+            which is operationally infeasible for a multi-tenant SDK.  The
+            connectionId-only callback design plus UUID validation in
+            OAuthHandler makes scheme interception harmless: a malicious app
+            that intercepts the callback receives only a reference UUID it
+            cannot exchange for credentials.
+        -->
+        <activity
+            android:name="xyz.connect.sdk.ui.OAuthCallbackActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:launchMode="singleTop">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="connectsdk-oauth"
+                    android:host="callback" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>
