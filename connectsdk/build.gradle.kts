@@ -18,10 +18,28 @@ android {
 
     buildTypes {
         release {
-            // F-008: Enable R8/ProGuard shrinking and obfuscation so that
-            // internal class names and method names are renamed in the
-            // release AAR, making reverse-engineering significantly harder.
-            isMinifyEnabled = true
+            // F-008 originally enabled R8 minify on the library to obscure
+            // internals. That was wrong for an SDK: R8 ran against the
+            // LIBRARY's proguard-rules.pro (which kept ConnectSDKTypes**
+            // and AuthTypes** wildcards but missed top-level enums like
+            // Environment, Theme, ConnectError, GenericEvent,
+            // ConnectAuthSession, DepositEvent), so those public types
+            // got renamed to a.c, a.e, etc. inside the AAR — consumers
+            // couldn't reference them by their documented names.
+            //
+            // The consumer-rules.pro (packaged as proguard.txt in the
+            // AAR) is correct (`-keep public class xyz.connect.sdk.** { *; }`)
+            // but it applies to the CONSUMER's R8 pass — too late, by
+            // then the AAR's classes are already renamed.
+            //
+            // RE resistance was never a real win anyway since the public
+            // mirror at connect-by-zerohash/connect-android is open source;
+            // anyone wanting to read the SDK can clone it.
+            //
+            // Libraries should ship un-minified bytecode + a consumer-rules.pro
+            // telling consumers' R8 what to keep when minifying the final
+            // app. Reverting to that pattern.
+            isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
