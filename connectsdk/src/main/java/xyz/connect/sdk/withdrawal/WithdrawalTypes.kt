@@ -31,19 +31,22 @@ data class WithdrawalEvent(
     val rawData: JSONObject?
 ) {
     companion object {
+        private fun JSONObject.optStringOrNull(key: String): String? =
+            if (has(key) && !isNull(key)) getString(key) else null
+
         /**
          * Parse withdrawal event from JSON data
          */
         fun fromJSON(data: JSONObject?): WithdrawalEvent {
             val statusObj = data?.optJSONObject("status")
-            val statusValue = statusObj?.optString("value")
+            val statusValue = statusObj?.optStringOrNull("value")
             return WithdrawalEvent(
-                withdrawalId = data?.optString("withdrawalId"),
+                withdrawalId = data?.optStringOrNull("withdrawalId"),
                 status = statusValue,
                 success = statusValue?.lowercase() == "processed",
-                assetId = data?.optString("assetId"),
-                networkId = data?.optString("networkId"),
-                amount = data?.optString("amount"),
+                assetId = data?.optStringOrNull("assetId"),
+                networkId = data?.optStringOrNull("networkId"),
+                amount = data?.optStringOrNull("amount"),
                 rawData = data
             )
         }
