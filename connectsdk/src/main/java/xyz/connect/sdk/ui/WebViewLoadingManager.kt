@@ -26,7 +26,11 @@ import xyz.connect.sdk.internal.Constants
  */
 class WebViewLoadingManager(
     private val context: Context,
-    private val isDarkMode: Boolean
+    private val isDarkMode: Boolean,
+    /** Initial label under the dots. */
+    private val loadingText: String = "Loading...",
+    /** Whether to show the Close button (hidden when used as a passive cover). */
+    private val showCloseButton: Boolean = true
 ) {
     companion object {
         private const val TAG = "WebViewLoadingManager"
@@ -145,7 +149,7 @@ class WebViewLoadingManager(
 
         // Loading label
         loadingLabel = TextView(context).apply {
-            text = "Loading..."
+            text = loadingText
             setTextColor(if (isDarkMode) Color.WHITE else Color.BLACK)
             textSize = 16f
             gravity = Gravity.CENTER
@@ -165,6 +169,7 @@ class WebViewLoadingManager(
             text = "Close"
             setTextColor(Color.WHITE)
             setBackgroundColor(Color.DKGRAY)
+            visibility = if (showCloseButton) View.VISIBLE else View.GONE
             val topMargin = dpToPx(Constants.LABEL_SPACING_DP)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,

@@ -19,6 +19,15 @@
             android:launchMode="singleTop" />
 
         <!--
+            Scraping login WebView (auth.login). SDK-owned, never exported —
+            launched only via in-process startActivity from Coinbase.
+        -->
+        <activity
+            android:name="xyz.connect.sdk.automation.CoinbaseLoginActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="false" />
+
+        <!--
             F-003 / cross-process OAuth callback receiver.
 
             This is the ONLY exported activity in the SDK. It receives the

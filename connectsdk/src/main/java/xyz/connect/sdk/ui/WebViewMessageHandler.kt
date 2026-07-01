@@ -48,6 +48,9 @@ internal class WebViewMessageHandler(
         private const val TAG = "WebViewMessageHandler"
         const val INTERFACE_NAME = "NativeAndroid"
 
+        /** Wire role marking an inbound scraping-bridge request (`ZeroAuthRequest`). */
+        private const val ROLE_HOST = "zeroauth-host"
+
         /**
          * Fallback constant kept for backward-compat with ProGuard rules and
          * tests that don't supply an explicit environment.  Prefer
@@ -91,6 +94,14 @@ internal class WebViewMessageHandler(
         fun onContentReady()
         fun onNavigate(url: String, mobileTarget: String?)
         fun onSessionClose()
+
+        /**
+         * A scraping-bridge request (`role:"zeroauth-host"`) arrived on this
+         * channel. Routed to the activity, which owns the Activity + coroutine
+         * scope the native platform flows need. [request] is the parsed
+         * `ZeroAuthRequest` envelope.
+         */
+        fun onAutomationRequest(request: JSONObject)
     }
 
     var delegate: Delegate? = null
@@ -138,6 +149,16 @@ internal class WebViewMessageHandler(
     private fun dispatchMessage(message: String) {
         try {
             val json = JSONObject(message)
+
+            // Scraping-bridge requests share this channel but use a different
+            // protocol: they carry role:"zeroauth-host" and an `operation`, not a
+            // `type`. Route them to the bridge (matches iOS NativeIOSMessageHandler
+            // dispatching by role).
+            if (json.optString("role") == ROLE_HOST) {
+                webView.post { delegate?.onAutomationRequest(json) }
+                return
+            }
+
             val type = json.optString("type")
             val data = json.optJSONObject("data")
 

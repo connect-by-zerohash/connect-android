@@ -14,6 +14,15 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
+
+        // Exposes the SDK version at runtime for the automation bridge's
+        // core.ping reply (mirrors iOS `ConnectSDK.version`). Same single source
+        // of truth as the publishing block: the git tag via -PSDK_VERSION.
+        buildConfigField(
+            "String",
+            "SDK_VERSION",
+            "\"${(findProperty("SDK_VERSION") as? String) ?: "0.0.0-SNAPSHOT"}\"",
+        )
     }
 
     buildTypes {

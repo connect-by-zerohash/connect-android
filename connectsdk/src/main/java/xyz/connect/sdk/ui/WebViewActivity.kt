@@ -21,6 +21,8 @@ import xyz.connect.sdk.CallbackHandler
 import xyz.connect.sdk.ConnectAllowList
 import xyz.connect.sdk.auth.OAuthHandler
 import xyz.connect.sdk.internal.Constants
+import xyz.connect.sdk.automation.AutomationBridge
+import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -90,6 +92,7 @@ class WebViewActivity : AppCompatActivity(),
     private var callbackHandler: CallbackHandler? = null
     private var sessionId: String? = null
     private var allowList: ConnectAllowList = ConnectAllowList.DEFAULT
+    private var automationBridge: AutomationBridge? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -354,6 +357,17 @@ class WebViewActivity : AppCompatActivity(),
         finish()
     }
 
+    override fun onAutomationRequest(request: JSONObject) {
+        // The offscreen status/balance WebViews attach to this activity's content
+        // (1x1, behind the UI WebView); login presents its own modal activity.
+        val bridge = automationBridge ?: AutomationBridge(
+            activity = this,
+            webView = webView,
+            targetOrigin = messageHandler.targetOrigin,
+        ).also { automationBridge = it }
+        bridge.handle(request)
+    }
+
     // WebViewOAuthManager.Delegate implementation
 
     override fun onOAuthSuccess(connectionId: String?) {
@@ -383,6 +397,7 @@ class WebViewActivity : AppCompatActivity(),
     override fun onDestroy() {
         super.onDestroy()
         try {
+            automationBridge?.dispose()
             if (::oauthHandler.isInitialized) {
                 oauthHandler.clear()
             }
