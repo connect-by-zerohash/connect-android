@@ -5,6 +5,19 @@ All notable changes to the Connect SDK for Android will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Sign in with Apple support in the Coinbase automation login WebView
+  (`AuthPopupWindow`), hosting Coinbase's `window.open` Apple popup in a child
+  WebView that shares the login cookie jar. Provider-agnostic, so future
+  provider logins (e.g. Kraken) reuse it unchanged (AUTH-3437).
+
+### Fixed
+- Apple social login was previously hidden on Android because the embedded
+  login WebView had no `window.open` popup support; the "OR" area on the
+  Coinbase login screen appeared empty (AUTH-3437).
+
 ## [1.0.0] - 2024-01-14
 
 ### Added

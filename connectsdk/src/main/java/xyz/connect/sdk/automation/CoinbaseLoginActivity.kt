@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.Message
 import android.util.Log
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
@@ -37,14 +38,17 @@ import java.net.URI
  * - **success / user-closed**: redirect to [SUCCESS_HOST] == success (iOS
  *   `successHosts`); closing before that == user-closed.
  *
- * Sign in with Apple is hidden by [loginModalJS] (unsupported on Android), so the
- * `appleid.apple.com` stay-open host iOS tolerates is never reached here.
+ * Sign in with Apple is supported: Coinbase opens it via `window.open`, and
+ * [AuthPopupWindow] (via [WebChromeClient.onCreateWindow]) hosts that popup in a
+ * child WebView sharing the login cookie jar — the Android counterpart of iOS
+ * `PopupWebViewController`.
  *
  * Never exported — launched only in-process from [present].
  */
 class CoinbaseLoginActivity : AppCompatActivity() {
 
     private var webView: WebView? = null
+    private val authPopup by lazy { AuthPopupWindow(this) }
     private var done = false
 
     private val handler = Handler(Looper.getMainLooper())
@@ -75,12 +79,11 @@ class CoinbaseLoginActivity : AppCompatActivity() {
             allowContentAccess = false
             allowFileAccessFromFileURLs = false
             allowUniversalAccessFromFileURLs = false
-            // No popup support: every popup-based provider (Google/Apple/passkey)
-            // is hidden by auth-hide-social.js, and the embedded modal has no
-            // onCreateWindow handler. Leaving multi-window OFF (the default) means a
-            // stray window.open navigates in-frame instead of dead-tapping a popup
-            // we can't present. (iOS keeps popups for Apple, which it supports; we
-            // don't, so we intentionally diverge here.)
+            // Popup support for provider social login (Apple): Coinbase opens
+            // Apple via window.open on appleid.apple.com and reads the result
+            // back from window.opener. onCreateWindow (below) hosts that popup
+            // in a child WebView sharing the process-wide cookie jar.
+            setSupportMultipleWindows(true)
         }
 
         // Shared, persistent cookies — the login session set here must be visible
@@ -111,7 +114,18 @@ class CoinbaseLoginActivity : AppCompatActivity() {
                 }
             }
         }
-        wv.webChromeClient = WebChromeClient()
+        wv.webChromeClient = object : WebChromeClient() {
+            override fun onCreateWindow(
+                view: WebView?,
+                isDialog: Boolean,
+                isUserGesture: Boolean,
+                resultMsg: Message,
+            ): Boolean {
+                // Only honor popups from a real user tap (the Apple button).
+                if (!isUserGesture) return false
+                return authPopup.onCreateWindow(resultMsg)
+            }
+        }
         wv.loadUrl(LOGIN_URL)
 
         scheduleTimeout()
@@ -175,6 +189,7 @@ class CoinbaseLoginActivity : AppCompatActivity() {
             pending?.complete("user-closed")
             pending = null
         }
+        authPopup.dismiss()
         webView?.destroy()
         webView = null
     }

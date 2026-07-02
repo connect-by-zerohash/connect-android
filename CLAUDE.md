@@ -108,6 +108,18 @@ OAuth uses Chrome Custom Tabs (NOT WebView) for security and SSO preservation:
 5. Intent filter catches callback in WebViewActivity
 6. Parse parameters and send result back to WebView via MessageHandler
 
+**Exception — Coinbase automation login (Apple):** The scraping login WebView
+(`automation/CoinbaseLoginActivity.kt`) supports "Sign in with Apple", which
+Coinbase drives via a `window.open` popup on `appleid.apple.com` that returns
+its result to `window.opener`. This popup is NOT handled by Chrome Custom Tabs
+(a separate browser has no `window.opener` link back to the login page).
+Instead the login WebView enables `setSupportMultipleWindows(true)` and its
+`WebChromeClient.onCreateWindow` delegates to `automation/AuthPopupWindow.kt`,
+a provider-agnostic host that presents the popup in a child WebView sharing the
+process-wide cookie jar (the Android counterpart of iOS `PopupWebViewController`).
+`AuthPopupWindow` carries no provider specifics, so a future Kraken login reuses
+it unchanged.
+
 ## Code Standards
 
 ### Naming Conventions

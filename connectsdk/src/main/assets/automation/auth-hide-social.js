@@ -1,12 +1,10 @@
 (function () {
   var STYLE_ID = "zh-hide-social";
-  // Google + all passkey buttons can't complete in an embedded WebView.
-  // Apple is additionally hidden on Android: Sign in with Apple is unsupported
-  // here (iOS keeps it via a native popup; Android has no equivalent), so we
-  // hide it like the other OAuth options rather than strand the user on it.
+  // Google + all passkey buttons can't complete in an embedded WebView, so they
+  // stay hidden. Apple is NOT hidden: its window.open popup is hosted by
+  // AuthPopupWindow (see CoinbaseLoginActivity.onCreateWindow), matching iOS.
   var CSS =
     '[data-testid="sign-in-with-google"]{display:none !important;}' +
-    '[data-testid="sign-in-with-apple"]{display:none !important;}' +
     'button[data-testid*="passkey" i]{display:none !important;}';
 
   function inject() {
