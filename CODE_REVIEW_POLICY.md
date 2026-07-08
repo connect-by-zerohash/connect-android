@@ -46,17 +46,15 @@ Reviewers check:
 
 ## Review Checklist
 
-```
-☐ Naming follows conventions (PascalCase/camelCase)
-☐ Access modifiers explicit
-☐ Proper null safety (avoid !!)
-☐ Public APIs documented with KDoc
-☐ No sensitive data logged
-☐ No hardcoded credentials
-☐ Tests cover new functionality
-☐ No compiler warnings
-☐ No lint errors
-```
+- [ ] Naming follows conventions (PascalCase/camelCase)
+- [ ] Access modifiers explicit
+- [ ] Proper null safety (avoid !!)
+- [ ] Public APIs documented with KDoc
+- [ ] No sensitive data logged
+- [ ] No hardcoded credentials
+- [ ] Tests cover new functionality
+- [ ] No compiler warnings
+- [ ] No lint errors
 
 **Full standards:** See [Code Standards](CODE_STANDARDS.md)
 

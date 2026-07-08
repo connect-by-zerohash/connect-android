@@ -72,7 +72,7 @@ import xyz.connect.sdk.ConnectSDK
 
 Before using the SDK, you'll need to obtain a JWT token from your backend. This token authenticates your app with the Connect platform.
 
-> 📘 **Note:** For detailed instructions on obtaining JWT tokens, please refer to [your company's authentication documentation](#).
+> **Note:** For detailed instructions on obtaining JWT tokens, please refer to [your company's authentication documentation](#).
 
 ### Basic Configuration
 
@@ -185,7 +185,7 @@ class AuthenticationActivity : AppCompatActivity() {
 
                 if (deposit.success) {
                     // Deposit was successful
-                    Log.d("Connect", "✅ Deposit successful!")
+                    Log.d("Connect", "Deposit successful!")
                     Log.d("Connect", "Deposit ID: ${deposit.depositId ?: "N/A"}")
                     Log.d("Connect", "Asset: ${deposit.assetId ?: "N/A"}")
                     Log.d("Connect", "Network: ${deposit.networkId ?: "N/A"}")
@@ -194,7 +194,7 @@ class AuthenticationActivity : AppCompatActivity() {
                     handleSuccessfulDeposit(deposit)
                 } else {
                     // Deposit failed or is pending
-                    Log.d("Connect", "⏳ Deposit status: ${deposit.status ?: "unknown"}")
+                    Log.d("Connect", "Deposit status: ${deposit.status ?: "unknown"}")
                 }
 
                 // Access raw data if needed

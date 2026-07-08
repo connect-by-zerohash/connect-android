@@ -1,8 +1,8 @@
-# 🚀 Quick Start - How to Test the Connect SDK
+# Quick Start - How to Test the Connect SDK
 
 This guide shows how to run the example app and test the Connect SDK for Android.
 
-## 📋 Prerequisites
+## Prerequisites
 
 1. **Android Studio** (Arctic Fox or newer)
    - Download: https://developer.android.com/studio
@@ -14,7 +14,7 @@ This guide shows how to run the example app and test the Connect SDK for Android
 3. **Emulator or Android Device**
    - API 21 (Android 5.0) or higher
 
-## 🎯 Option 1: Run in Android Studio (Recommended)
+## Option 1: Run in Android Studio (Recommended)
 
 ### Step 1: Open the Project
 
@@ -45,7 +45,7 @@ Before running, you need a valid JWT token:
    - If you don't have an emulator: **Tools → Device Manager → Create Device**
 
 2. **Execute the app**:
-   - Click the green ▶️ (Run) button or press `Shift + F10`
+   - Click the green Run button or press `Shift + F10`
    - Wait for build and installation
 
 3. **Use the app**:
@@ -55,7 +55,7 @@ Before running, you need a valid JWT token:
    - Click **Connect Account**
    - The WebView will open with the Connect platform
 
-## 🖥️ Option 2: Run via Command Line
+## Option 2: Run via Command Line
 
 ### Step 1: Verify Installation
 
@@ -106,7 +106,7 @@ The app will be installed as "Connect Demo". Open it manually on the device or u
 ~/Library/Android/sdk/platform-tools/adb shell am start -n com.example.connectdemo/.MainActivity
 ```
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Issue: "SDK location not found"
 
@@ -147,28 +147,28 @@ curl -L https://github.com/gradle/gradle/raw/v8.2.0/gradle/wrapper/gradle-wrappe
 2. **Test with development token**: Contact Connect support
 3. **Demo mode**: Some errors are expected without a valid JWT, but you can see the UI
 
-## 📱 What to Test
+## What to Test
 
 ### Test 1: App Interface
-- ✅ JWT field appears
-- ✅ Environment options (Production/Sandbox)
-- ✅ Theme options (System/Light/Dark)
-- ✅ "Connect Account" button
-- ✅ Event log at the bottom
+- JWT field appears
+- Environment options (Production/Sandbox)
+- Theme options (System/Light/Dark)
+- "Connect Account" button
+- Event log at the bottom
 
 ### Test 2: Authentication Flow
 1. Paste a valid JWT
 2. Click "Connect Account"
-3. See the log showing "🚀 Starting Connect session..."
+3. See the log showing "Starting Connect session..."
 4. WebView should open with animated loading (3 yellow dots)
 5. Connect platform content should load
 
 ### Test 3: Callbacks
 Observe the event log showing:
-- `📢 Event`: Generic events
-- `💰 Deposit`: When a deposit is completed
-- `❌ Error`: Errors that occur
-- `👋 Session closed`: When closing the WebView
+- `Event`: Generic events
+- `Deposit`: When a deposit is completed
+- `Error`: Errors that occur
+- `Session closed`: When closing the WebView
 
 ### Test 4: Themes
 Test each theme and see the changes:
@@ -183,7 +183,7 @@ If the flow includes OAuth:
 3. Automatically returns to the app
 4. Log shows "OAuth success"
 
-## 📊 Logs and Debug
+## Logs and Debug
 
 ### View logs in Android Studio
 
@@ -210,7 +210,7 @@ adb logcat -c
 adb logcat | grep -i "webview"
 ```
 
-## 🎨 Customize the Test App
+## Customize the Test App
 
 ### Change colors
 
@@ -227,10 +227,10 @@ Edit: `app/src/main/java/com/example/connectdemo/MainActivity.kt`
 Add more logs in the `addLog()` function:
 
 ```kotlin
-addLog("🎯 Custom log message")
+addLog("Custom log message")
 ```
 
-## 📦 Build for Release
+## Build for Release
 
 ### Generate Debug APK
 
@@ -260,7 +260,7 @@ The APK can be copied and installed on any Android device:
 cp app/build/outputs/apk/debug/app-debug.apk ~/Desktop/ConnectDemo.apk
 ```
 
-## 🔧 Next Steps
+## Next Steps
 
 1. **Integrate into your app**:
    - Copy the `connectsdk` module to your project
@@ -275,20 +275,16 @@ cp app/build/outputs/apk/debug/app-debug.apk ~/Desktop/ConnectDemo.apk
    - See `ARCHITECTURE.md` to understand the structure
    - See `CONTRIBUTING.md` for contribution guidelines
 
-## 📚 Additional Resources
+## Additional Resources
 
 - **README.md**: Complete SDK documentation
 - **EXAMPLE_USAGE.md**: Code examples
 - **ARCHITECTURE.md**: Detailed architecture
 - **Android Developer**: https://developer.android.com
 
-## ❓ Need Help?
+## Need Help?
 
 1. Check the logs in Logcat
 2. Review the troubleshooting above
 3. Consult the complete documentation in README.md
 4. Contact support
-
----
-
-**Done!** 🎉 Now you can test the Connect SDK for Android!

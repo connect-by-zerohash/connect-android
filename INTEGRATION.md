@@ -1,4 +1,4 @@
-# 📦 Connect SDK - Integration Guide
+# Connect SDK - Integration Guide
 
 Technical documentation for integrating the Connect SDK into your Android application.
 
