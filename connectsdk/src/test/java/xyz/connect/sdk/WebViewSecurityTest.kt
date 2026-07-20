@@ -1,8 +1,10 @@
 package xyz.connect.sdk
 
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import xyz.connect.sdk.auth.OAuthHandler
@@ -119,6 +121,36 @@ class WebViewSecurityTest {
     @Test
     fun `file scheme is rejected`() {
         assertFalse(WebViewMessageHandler.isAllowedOrigin("file:///data/local/tmp/payload.html", prodHost))
+    }
+
+    // -------------------------------------------------------------------------
+    // Error payload wire contract: {errorCode, reason} (zerohash-sdk ErrorPayload).
+    // A missing key must not surface as an empty message.
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `errorCode and reason are read from the payload`() {
+        val data = JSONObject().apply {
+            put("errorCode", "auth_error")
+            put("reason", "Your session expired, please try again.")
+        }
+        val (code, message) = WebViewMessageHandler.extractErrorCodeAndMessage(data)
+        assertEquals("auth_error", code)
+        assertEquals("Your session expired, please try again.", message)
+    }
+
+    @Test
+    fun `missing reason falls back to Unknown error, not blank`() {
+        val data = JSONObject().apply { put("errorCode", "unknown_error") }
+        val (_, message) = WebViewMessageHandler.extractErrorCodeAndMessage(data)
+        assertEquals("Unknown error", message)
+    }
+
+    @Test
+    fun `null data yields null code and Unknown error message`() {
+        val (code, message) = WebViewMessageHandler.extractErrorCodeAndMessage(null)
+        assertNull(code)
+        assertEquals("Unknown error", message)
     }
 
     // -------------------------------------------------------------------------

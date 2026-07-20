@@ -82,6 +82,19 @@ internal class WebViewMessageHandler(
                 false
             }
         }
+
+        /**
+         * Extracts (code, message) from an `{type:"error", data:...}` payload.
+         *
+         * Wire contract is `{errorCode, reason}` (zerohash-sdk's `ErrorPayload`).
+         * `optString` returns `""` for a missing key, so empty is normalized to
+         * null/"Unknown error" rather than surfacing a blank.
+         */
+        internal fun extractErrorCodeAndMessage(data: JSONObject?): Pair<String?, String> {
+            val code = data?.optString("errorCode")?.ifEmpty { null }
+            val message = data?.optString("reason")?.ifEmpty { null } ?: "Unknown error"
+            return code to message
+        }
     }
 
     /**
@@ -208,8 +221,7 @@ internal class WebViewMessageHandler(
     }
 
     private fun handleError(data: JSONObject?) {
-        val code = data?.optString("code")
-        val message = data?.optString("message") ?: "Unknown error"
+        val (code, message) = extractErrorCodeAndMessage(data)
 
         webView.post {
             callbackHandler.handleError(code, message, data)
@@ -256,7 +268,7 @@ internal class WebViewMessageHandler(
             put("success", true)
             connectionId?.let { put("connectionId", it) }
         }
-        sendMessageToWeb("oauth-result", oauthMessage)
+        sendMessageToWeb("oauth-success", oauthMessage)
     }
 
     fun sendOAuthError(error: String) {
@@ -264,7 +276,7 @@ internal class WebViewMessageHandler(
             put("success", false)
             put("error", error)
         }
-        sendMessageToWeb("oauth-result", oauthMessage)
+        sendMessageToWeb("oauth-error", oauthMessage)
     }
 
     /**
