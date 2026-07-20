@@ -73,3 +73,9 @@ lint/tmp/
 
 # Mac
 .DS_Store
+
+# --- DO NOT COMMIT: local test-only files ---
+# Netskope corporate CA bundle + debug network-security overlay. These are
+# developer-machine specific (corporate TLS interception on the emulator) and
+# must never be committed.
+app/src/debug/
