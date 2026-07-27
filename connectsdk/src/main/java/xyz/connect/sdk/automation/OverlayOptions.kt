@@ -8,7 +8,7 @@ import xyz.connect.sdk.R
  * The brand whose dot palette + "Powered by" mark the loading overlay renders.
  * Android port of iOS `Brand`. The brand is the single source of truth for the
  * palette and footer logo (callers don't supply colors directly), mirroring the
- * web `resolveOverlayOptions`. `connect` is the default.
+ * web `resolveOverlayOptions`. `connect` is the default for this SDK.
  */
 internal enum class Brand(
     val left: Int,
@@ -66,7 +66,7 @@ internal data class OverlayOptions(
             if (wire == null) return DEFAULT
             val titles = wire.optJSONArray("titles").toStringListOrNull()
             val subtitles = wire.optJSONArray("subtitles").toStringListOrNull()
-            val cycleMs = if (wire.isNull("cycleMs")) null else wire.optLong("cycleMs")
+            val cycleMs = wire.optLongOrNull("cycleMs")
             return OverlayOptions(
                 titles = titles?.takeIf { it.isNotEmpty() } ?: DEFAULT.titles,
                 subtitles = subtitles?.takeIf { it.isNotEmpty() } ?: DEFAULT.subtitles,
@@ -74,7 +74,7 @@ internal data class OverlayOptions(
                 // value, and a 0/negative cycle busy-loops LoadingOverlayView's
                 // self-reposting postDelayed on the main thread.
                 cycleMs = cycleMs?.takeIf { it > 0 } ?: DEFAULT.cycleMs,
-                brand = Brand.normalize(if (wire.isNull("branding")) null else wire.optString("branding")),
+                brand = Brand.normalize(wire.optStringOrNull("branding")),
             )
         }
 

@@ -1,16 +1,14 @@
 package xyz.connect.sdk.automation
 
-import android.annotation.SuppressLint
 import android.app.Activity
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
-import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
-import android.webkit.WebSettings
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
@@ -65,64 +63,41 @@ internal class AutomationSession(
     private val pending = ConcurrentHashMap<String, CompletableDeferred<JSONObject?>>()
     private var seq = 0
 
-    @SuppressLint("SetJavaScriptEnabled")
     suspend fun load() = withContext(Dispatchers.Main) {
         val wv = WebView(activity)
         webView = wv
-        wv.settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            databaseEnabled = true
-            mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-            // Defense-in-depth: deny local-file/content access (defaults true
-            // below API 30; minSdk 21). Only https://*.coinbase.com is loaded.
-            allowFileAccess = false
-            allowContentAccess = false
-            allowFileAccessFromFileURLs = false
-            allowUniversalAccessFromFileURLs = false
-        }
-        CookieManager.getInstance().setAcceptCookie(true)
-        CookieManager.getInstance().setAcceptThirdPartyCookies(wv, true)
+        wv.applyAutomationDefaults()
 
         wv.addJavascriptInterface(Bridge(), BRIDGE)
         wv.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, u: String?) {
                 if (!initialLoad.isCompleted) initialLoad.complete(Unit)
             }
+
+            // Navigation host allowlist: this session drives the Coinbase withdrawal
+            // automation, so only Coinbase-owned origins may load in the main frame.
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean =
+                blockOffCoinbaseNavigation(request?.url?.toString(), request?.isForMainFrame != false, TAG)
+
+            @Deprecated("Deprecated in Java")
+            override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean =
+                blockOffCoinbaseNavigation(url, isMainFrame = true, TAG)
         }
         wv.webChromeClient = WebChromeClient()
 
         val container = FrameLayout(activity)
-        container.addView(
-            wv,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT,
-            ),
-        )
+        container.addView(wv, matchParent())
         // Branded loading cover ON TOP of the WebView — hides the live Coinbase
         // automation behind the SDK's loading state. Lifted by [revealOverlay].
         if (showOverlay) {
             val cover = LoadingOverlayView(activity, overlayOptions)
             overlay = cover
-            container.addView(
-                cover.getView(),
-                FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                ),
-            )
+            container.addView(cover.getView(), matchParent())
             cover.start()
         }
         root = container
         // Added after the host's content view → drawn on top while VISIBLE.
-        contentView().addView(
-            container,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT,
-            ),
-        )
+        activity.contentView().addView(container, matchParent())
 
         Log.d(TAG, "loading $url")
         wv.loadUrl(url)
@@ -149,23 +124,16 @@ internal class AutomationSession(
         pending[id] = deferred
 
         val argDecl = if (argName != null) "var $argName = $argJson;" else ""
-        // Strip a trailing `;` so an IIFE-expression script sits cleanly inside
-        // Promise.resolve((…)); a bare entry call is unaffected. Same as iOS.
-        val expr = entryExpr.trimEnd(';', '\n', '\r', ' ', '\t')
-        val wrapped = """
-            (function () {
-              try {
-                $prelude
-                $argDecl
-                Promise.resolve(($expr)).then(
-                  function (r) { $BRIDGE.onResolve("$id", JSON.stringify(r === undefined ? null : r)); },
-                  function (e) { $BRIDGE.onReject("$id", String((e && e.message) || e)); }
-                );
-              } catch (e) {
-                $BRIDGE.onReject("$id", String((e && e.message) || e));
-              }
-            })();
-        """.trimIndent()
+        val wrapped = buildPromiseWrapper(BRIDGE, id, prelude, argDecl, entryExpr)
+
+        // Belt-and-suspenders: refuse to run money-movement automation if the page
+        // has somehow landed off Coinbase, even if a navigation slipped past the
+        // WebViewClient allowlist.
+        val currentHost = hostOf(webView?.url)
+        if (!isTrustedCoinbaseHost(currentHost)) {
+            pending.remove(id)
+            throw PlatformException("withdraw/untrusted-host")
+        }
 
         Log.d(TAG, "evaluateAsync id=$id ${entryExpr.take(60)}")
         webView?.evaluateJavascript(wrapped, null)
@@ -180,8 +148,7 @@ internal class AutomationSession(
     }
 
     /** Read a bundled asset as UTF-8 text (a platform's injected scripts). */
-    fun asset(path: String): String =
-        activity.assets.open(path).bufferedReader().use { it.readText() }
+    fun asset(path: String): String = activity.readAutomationAsset(path)
 
     /** INVISIBLE: host (connect-auth) shows and receives touches; WebView stays alive. */
     fun stepAside() = activity.runOnUiThread { root?.visibility = View.INVISIBLE }
@@ -237,13 +204,10 @@ internal class AutomationSession(
         @JavascriptInterface
         fun onResolve(id: String, json: String?) {
             val d = pending[id] ?: return
-            val parsed = json?.takeIf { it != "null" }?.let {
-                runCatching { JSONObject(it) }.getOrNull()
-            }
-            if (json != null && json != "null" && parsed == null) {
-                d.completeExceptionally(PlatformException("non-object JS return: $json"))
-            } else {
-                d.complete(parsed)
+            try {
+                d.complete(decodeJsResult(json))
+            } catch (e: PlatformException) {
+                d.completeExceptionally(e)
             }
         }
 
@@ -252,9 +216,6 @@ internal class AutomationSession(
             pending[id]?.completeExceptionally(PlatformException(message ?: "JS rejected"))
         }
     }
-
-    private fun contentView(): FrameLayout =
-        activity.findViewById(android.R.id.content)
 
     companion object {
         private const val TAG = "ZHAutomation"

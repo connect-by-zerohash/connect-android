@@ -1,6 +1,5 @@
 package xyz.connect.sdk.automation
 
-import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
@@ -10,12 +9,10 @@ import android.os.Looper
 import android.os.Message
 import android.util.Log
 import android.webkit.WebChromeClient
-import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.appcompat.app.AppCompatActivity
 import kotlinx.coroutines.CompletableDeferred
-import java.net.URI
 
 /**
  * SDK-owned visible WebView that renders the Coinbase login page — the Android
@@ -26,7 +23,7 @@ import java.net.URI
  * and communicates over the bridge).
  *
  * Parity with iOS `Coinbase.login` + `ModalViewController` + `ModalAutoClose`:
- * - **documentStart injection** ([loginModalJS] = hide-social + prefer-password):
+ * - **documentStart injection** ([loginModalJS] = hide-social + choose-2fa-method):
  *   Android has no WKUserScript documentStart hook, so we inject on every
  *   [WebViewClient.onPageStarted] (and again on finish as a backstop). The
  *   scripts are idempotent and self-persist (CSS rule + MutationObserver), so
@@ -45,7 +42,7 @@ import java.net.URI
  *
  * Never exported — launched only in-process from [present].
  */
-class CoinbaseLoginActivity : AppCompatActivity() {
+internal class CoinbaseLoginActivity : AppCompatActivity() {
 
     private var webView: WebView? = null
     private val authPopup by lazy { AuthPopupWindow(this) }
@@ -54,13 +51,12 @@ class CoinbaseLoginActivity : AppCompatActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private var probeHits = 0
 
-    /** hide-social + prefer-password, read once (idempotent; re-injected per nav). */
+    /** hide-social + choose-2fa-method, read once (idempotent; re-injected per nav). */
     private val loginModalJS: String by lazy {
-        asset("automation/auth-hide-social.js") + "\n" + asset("automation/auth-prefer-password.js")
+        asset("automation/auth-hide-social.js") + "\n" + asset("automation/auth-choose-2fa-method.js")
     }
-    private val passkeyOnlyJS: String by lazy { asset("automation/auth-passkey-only.js") }
+    private val passkeyOnlyJS: String by lazy { asset("automation/auth-detect-unsupported-2fa.js") }
 
-    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -68,28 +64,14 @@ class CoinbaseLoginActivity : AppCompatActivity() {
         webView = wv
         setContentView(wv)
 
-        wv.settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            databaseEnabled = true
-            mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-            // Defense-in-depth: deny local-file/content access (defaults true
-            // below API 30; minSdk 21). Only login.coinbase.com is loaded.
-            allowFileAccess = false
-            allowContentAccess = false
-            allowFileAccessFromFileURLs = false
-            allowUniversalAccessFromFileURLs = false
-            // Popup support for provider social login (Apple): Coinbase opens
-            // Apple via window.open on appleid.apple.com and reads the result
-            // back from window.opener. onCreateWindow (below) hosts that popup
-            // in a child WebView sharing the process-wide cookie jar.
-            setSupportMultipleWindows(true)
-        }
-
-        // Shared, persistent cookies — the login session set here must be visible
-        // to the offscreen status/balance runs (process-wide CookieManager).
-        android.webkit.CookieManager.getInstance().setAcceptCookie(true)
-        android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(wv, true)
+        wv.applyAutomationDefaults()
+        // Popup support for provider social login (Apple): Coinbase opens Apple
+        // via window.open on appleid.apple.com and reads the result back from
+        // window.opener. onCreateWindow (below) hosts that popup in a child
+        // WebView sharing the process-wide cookie jar (set up by
+        // applyAutomationDefaults). iOS keeps popups for Apple via
+        // PopupWebViewController; this is the Android counterpart.
+        wv.settings.setSupportMultipleWindows(true)
 
         wv.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
@@ -207,11 +189,8 @@ class CoinbaseLoginActivity : AppCompatActivity() {
     // Graceful: a missing/unreadable asset (packaging regression) injects empty JS
     // (a no-op) rather than crashing the modal from a WebViewClient callback.
     private fun asset(path: String): String =
-        runCatching { assets.open(path).bufferedReader().use { it.readText() } }
+        runCatching { readAutomationAsset(path) }
             .getOrElse { Log.e(TAG, "missing automation asset: $path", it); "" }
-
-    private fun hostOf(url: String?): String =
-        runCatching { URI(url).host ?: "" }.getOrDefault("")
 
     companion object {
         private const val TAG = "ZHAutomation"

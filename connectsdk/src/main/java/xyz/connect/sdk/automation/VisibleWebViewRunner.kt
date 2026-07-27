@@ -1,17 +1,15 @@
 package xyz.connect.sdk.automation
 
-import android.annotation.SuppressLint
 import android.app.Activity
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
-import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
-import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
@@ -20,7 +18,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
-import java.net.URI
 
 /**
  * Single-shot, VISIBLE, full-screen WebView covered by a branded
@@ -65,10 +62,8 @@ internal class VisibleWebViewRunner(private val activity: Activity) {
         paramsJson: String? = null,
         settle: (host: String) -> SettleDecision,
     ): JSONObject? = withContext(Dispatchers.Main) {
-        fun readAsset(path: String) =
-            activity.assets.open(path).bufferedReader().use { it.readText() }
-        val script = readAsset(scriptAsset)
-        val prelude = preludeAssets.joinToString("\n") { readAsset(it) }
+        val script = activity.readAutomationAsset(scriptAsset)
+        val prelude = preludeAssets.joinToString("\n") { activity.readAutomationAsset(it) }
         try {
             createAndLoad(url, script, prelude, paramsJson, overlayOptions, showOverlay, waitForChallengeClearance, settle)
             val value = withTimeoutOrNull(timeoutMs) { result.await() }
@@ -81,7 +76,6 @@ internal class VisibleWebViewRunner(private val activity: Activity) {
         }
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
     private fun createAndLoad(
         url: String,
         script: String,
@@ -94,23 +88,21 @@ internal class VisibleWebViewRunner(private val activity: Activity) {
     ) {
         val wv = WebView(activity)
         webView = wv
-        wv.settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            databaseEnabled = true
-            mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-            // Defense-in-depth: deny local-file/content access (defaults true
-            // below API 30; minSdk 21). Only https://*.coinbase.com is loaded.
-            allowFileAccess = false
-            allowContentAccess = false
-            allowFileAccessFromFileURLs = false
-            allowUniversalAccessFromFileURLs = false
-        }
-        CookieManager.getInstance().setAcceptCookie(true)
-        CookieManager.getInstance().setAcceptThirdPartyCookies(wv, true)
+        wv.applyAutomationDefaults()
 
         wv.addJavascriptInterface(PromiseBridge(), BRIDGE)
         wv.webViewClient = object : WebViewClient() {
+            // Navigation host allowlist: this WebView carries the live Coinbase
+            // session and runs the balance / deposit-address automation, so only
+            // Coinbase-owned origins may load in the main frame. Sub-frames (e.g. the
+            // Cloudflare Turnstile widget) are left alone.
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean =
+                blockOffCoinbaseNavigation(request?.url?.toString(), request?.isForMainFrame != false, TAG)
+
+            @Deprecated("Deprecated in Java")
+            override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean =
+                blockOffCoinbaseNavigation(url, isMainFrame = true, TAG)
+
             override fun onPageFinished(view: WebView?, finishedUrl: String?) {
                 if (result.isCompleted || started) return
                 val host = hostOf(finishedUrl)
@@ -140,8 +132,14 @@ internal class VisibleWebViewRunner(private val activity: Activity) {
                 error: WebResourceError?,
             ) {
                 if (request?.isForMainFrame == true && !started && !result.isCompleted) {
+                    // WebResourceError.getDescription() is API 23+. This 3-arg
+                    // onReceivedError overload is itself only invoked on API 23+,
+                    // but guard explicitly so lint (minSdk 21) is satisfied and
+                    // API 21/22 is provably safe.
+                    val reason =
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) error?.description else null
                     result.completeExceptionally(
-                        PlatformException("load failed: ${error?.description}"),
+                        PlatformException("load failed: $reason"),
                     )
                 }
             }
@@ -150,22 +148,10 @@ internal class VisibleWebViewRunner(private val activity: Activity) {
         // Full-screen real-sized WebView so the SPA renders, with the branded
         // overlay on top (when showOverlay) so the user never sees the page.
         val container = FrameLayout(activity)
-        container.addView(
-            wv,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT,
-            ),
-        )
+        container.addView(wv, matchParent())
         if (showOverlay) presentOverlay(container, overlayOptions)
         root = container
-        contentView().addView(
-            container,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT,
-            ),
-        )
+        activity.contentView().addView(container, matchParent())
 
         Log.d(TAG, "loading $url")
         wv.loadUrl(url)
@@ -176,13 +162,7 @@ internal class VisibleWebViewRunner(private val activity: Activity) {
         if (overlay != null) return
         val cover = LoadingOverlayView(activity, overlayOptions)
         overlay = cover
-        container.addView(
-            cover.getView(),
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT,
-            ),
-        )
+        container.addView(cover.getView(), matchParent())
         cover.start()
     }
 
@@ -220,22 +200,8 @@ internal class VisibleWebViewRunner(private val activity: Activity) {
     }
 
     private fun evaluate(view: WebView?, script: String, prelude: String, paramsJson: String?) {
-        val expr = script.trimEnd(';', '\n', '\r', ' ', '\t')
         val paramsDecl = if (paramsJson != null) "var params = $paramsJson;" else ""
-        val wrapped = """
-            (function () {
-              try {
-                $prelude
-                $paramsDecl
-                Promise.resolve(($expr)).then(
-                  function (r) { $BRIDGE.onResolve("$CALL_ID", JSON.stringify(r === undefined ? null : r)); },
-                  function (e) { $BRIDGE.onReject("$CALL_ID", String((e && e.message) || e)); }
-                );
-              } catch (e) {
-                $BRIDGE.onReject("$CALL_ID", String((e && e.message) || e));
-              }
-            })();
-        """.trimIndent()
+        val wrapped = buildPromiseWrapper(BRIDGE, CALL_ID, prelude, paramsDecl, script)
         view?.evaluateJavascript(wrapped, null)
     }
 
@@ -243,13 +209,10 @@ internal class VisibleWebViewRunner(private val activity: Activity) {
         @JavascriptInterface
         fun onResolve(id: String, json: String?) {
             if (id != CALL_ID) return
-            val parsed = json?.takeIf { it != "null" }?.let {
-                runCatching { JSONObject(it) }.getOrNull()
-            }
-            if (json != null && json != "null" && parsed == null) {
-                result.completeExceptionally(PlatformException("non-object JS return: $json"))
-            } else {
-                result.complete(parsed)
+            try {
+                result.complete(decodeJsResult(json))
+            } catch (e: PlatformException) {
+                result.completeExceptionally(e)
             }
         }
 
@@ -277,12 +240,6 @@ internal class VisibleWebViewRunner(private val activity: Activity) {
             }
         }
     }
-
-    private fun contentView(): FrameLayout =
-        activity.findViewById(android.R.id.content)
-
-    private fun hostOf(url: String?): String =
-        runCatching { URI(url).host ?: "" }.getOrDefault("")
 
     companion object {
         private const val TAG = "ZHAutomation"

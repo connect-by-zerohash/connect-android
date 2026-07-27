@@ -1,13 +1,12 @@
 package xyz.connect.sdk.automation
 
-import android.annotation.SuppressLint
 import android.app.Activity
+import android.os.Build
 import android.util.Log
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
-import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
@@ -16,7 +15,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
-import java.net.URI
 
 /**
  * Loads a remote URL in a transient WebView, waits for the page to settle on a
@@ -80,9 +78,12 @@ internal class PromiseWebViewRunner(private val activity: Activity) {
      *                       reads (e.g. coinbase-balance-queries.js sets
      *                       `window.__zhCoinbaseQueries`).
      * @param paramsJson     when non-null, a JSON literal bound as the in-scope
-     *                       `params` variable the main script reads. MUST be
-     *                       trusted, compile-time-constant data (it's spliced into
-     *                       the source); the balance flow passes a fixed ops list.
+     *                       `params` variable the main script reads. It is spliced
+     *                       verbatim into the evaluated source, so it MUST be the
+     *                       output of `org.json` serialization
+     *                       (`JSONObject`/`JSONArray.toString()`) — that escaping is
+     *                       the CWE-94 defense (see [buildPromiseWrapper]). The
+     *                       balance flow passes a fixed org.json-encoded ops list.
      * @param settle         consulted on each page finish to decide what to do
      *                       with the current URL.
      * @return the decoded result object, or the [SettleDecision.Answer] payload.
@@ -97,10 +98,8 @@ internal class PromiseWebViewRunner(private val activity: Activity) {
         paramsJson: String? = null,
         settle: (host: String) -> SettleDecision,
     ): JSONObject? = withContext(Dispatchers.Main) {
-        fun readAsset(path: String) =
-            activity.assets.open(path).bufferedReader().use { it.readText() }
-        val script = readAsset(scriptAsset)
-        val prelude = preludeAssets.joinToString("\n") { readAsset(it) }
+        val script = activity.readAutomationAsset(scriptAsset)
+        val prelude = preludeAssets.joinToString("\n") { activity.readAutomationAsset(it) }
         try {
             createAndLoad(url, script, prelude, paramsJson, settle)
             val value = withTimeoutOrNull(timeoutMs) { result.await() }
@@ -115,7 +114,6 @@ internal class PromiseWebViewRunner(private val activity: Activity) {
         }
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
     private fun createAndLoad(
         url: String,
         script: String,
@@ -126,34 +124,37 @@ internal class PromiseWebViewRunner(private val activity: Activity) {
         val wv = WebView(activity)
         webView = wv
 
-        wv.settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            databaseEnabled = true
-            mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-            // Defense-in-depth: lock out local-file/content access (defaults to
-            // true below API 30, and minSdk is 21). These WebViews only ever load
-            // https://*.coinbase.com, so file:// access is never needed.
-            allowFileAccess = false
-            allowContentAccess = false
-            allowFileAccessFromFileURLs = false
-            allowUniversalAccessFromFileURLs = false
-            // A real browser UA — Coinbase's SPA gates on it. ponytail: pin a
-            // current desktop/mobile UA string here once we see what their site
-            // accepts on-device; the default Android WebView UA may be flagged.
-        }
-
-        // Shared, persistent cookies are what tie login → status → balance
-        // together (the iOS equivalent is the shared WKWebsiteDataStore). The
-        // Android CookieManager is already a process-wide singleton, so cookies
-        // set by the login modal are visible here for free — we just must not
-        // clear them. Allow third-party cookies for the embedded session.
-        android.webkit.CookieManager.getInstance().setAcceptCookie(true)
-        android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(wv, true)
+        wv.applyAutomationDefaults()
 
         wv.addJavascriptInterface(PromiseBridge(), BRIDGE)
 
         wv.webViewClient = object : WebViewClient() {
+            // Navigation host allowlist: this offscreen WebView carries the live
+            // Coinbase session, so only Coinbase-owned origins may load in the main
+            // frame. Sub-frames (e.g. the Cloudflare Turnstile widget) are left alone.
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean =
+                blockOffCoinbaseNavigation(request?.url?.toString(), request?.isForMainFrame != false, TAG)
+
+            @Deprecated("Deprecated in Java")
+            override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean =
+                blockOffCoinbaseNavigation(url, isMainFrame = true, TAG)
+
+            override fun doUpdateVisitedHistory(view: WebView?, historyUrl: String?, isReload: Boolean) {
+                // Settle on NAVIGATION for terminal (Answer) URLs, not just
+                // onPageFinished. The logged-out signal is the redirect to
+                // login.coinbase.com; its SPA doesn't reliably fire onPageFinished,
+                // so waiting for it races the home page's own load and times out.
+                // Evaluate still waits for onPageFinished (needs the page loaded to
+                // inject); only Answer is claimed early here.
+                if (result.isCompleted) return
+                val host = hostOf(historyUrl)
+                val decision = settle(host)
+                if (decision is SettleDecision.Answer) {
+                    Log.d(TAG, "settle($host) => answer (on navigation)")
+                    result.complete(decision.value)
+                }
+            }
+
             override fun onPageFinished(view: WebView?, finishedUrl: String?) {
                 if (result.isCompleted) return
                 val host = hostOf(finishedUrl)
@@ -189,8 +190,14 @@ internal class PromiseWebViewRunner(private val activity: Activity) {
                 // (e.g. → login.coinbase.com) settles via onPageFinished, and a
                 // genuine stall is caught by the outer timeout.
                 if (request?.isForMainFrame == true && !injected && !result.isCompleted) {
+                    // WebResourceError.getDescription() is API 23+. This 3-arg
+                    // onReceivedError overload is itself only invoked on API 23+,
+                    // but guard explicitly so lint (minSdk 21) is satisfied and
+                    // API 21/22 is provably safe.
+                    val reason =
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) error?.description else null
                     result.completeExceptionally(
-                        PlatformException("load failed: ${error?.description}")
+                        PlatformException("load failed: $reason")
                     )
                 }
             }
@@ -203,7 +210,7 @@ internal class PromiseWebViewRunner(private val activity: Activity) {
         // the screen. See class-level ponytail note on the upgrade path.
         val params = FrameLayout.LayoutParams(1, 1)
         wv.alpha = 0f
-        contentView().addView(wv, params)
+        activity.contentView().addView(wv, params)
     }
 
     /**
@@ -221,26 +228,8 @@ internal class PromiseWebViewRunner(private val activity: Activity) {
      * trims the same trailing chars before wrapping.
      */
     private fun evaluate(view: WebView?, script: String, prelude: String, paramsJson: String?) {
-        val expr = script.trimEnd(';', '\n', '\r', ' ', '\t')
         val paramsDecl = if (paramsJson != null) "var params = $paramsJson;" else ""
-        val wrapped = """
-            (function () {
-              try {
-                $prelude
-                $paramsDecl
-                Promise.resolve(($expr)).then(
-                  function (r) {
-                    $BRIDGE.onResolve("$CALL_ID", JSON.stringify(r === undefined ? null : r));
-                  },
-                  function (e) {
-                    $BRIDGE.onReject("$CALL_ID", String((e && e.message) || e));
-                  }
-                );
-              } catch (e) {
-                $BRIDGE.onReject("$CALL_ID", String((e && e.message) || e));
-              }
-            })();
-        """.trimIndent()
+        val wrapped = buildPromiseWrapper(BRIDGE, CALL_ID, prelude, paramsDecl, script)
         view?.evaluateJavascript(wrapped, null)
     }
 
@@ -250,13 +239,10 @@ internal class PromiseWebViewRunner(private val activity: Activity) {
             if (id != CALL_ID) return
             // Arrives on the JavaBridge thread; CompletableDeferred is safe to
             // complete from any thread.
-            val parsed = json?.takeIf { it != "null" }?.let {
-                runCatching { JSONObject(it) }.getOrNull()
-            }
-            if (json != null && json != "null" && parsed == null) {
-                result.completeExceptionally(PlatformException("non-object JS return: $json"))
-            } else {
-                result.complete(parsed)
+            try {
+                result.complete(decodeJsResult(json))
+            } catch (e: PlatformException) {
+                result.completeExceptionally(e)
             }
         }
 
@@ -276,10 +262,4 @@ internal class PromiseWebViewRunner(private val activity: Activity) {
             wv.destroy()
         }
     }
-
-    private fun contentView(): FrameLayout =
-        activity.findViewById(android.R.id.content)
-
-    private fun hostOf(url: String?): String =
-        runCatching { URI(url).host ?: "" }.getOrDefault("")
 }

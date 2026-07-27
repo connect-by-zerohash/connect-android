@@ -19,8 +19,8 @@ class AutomationAssetsTest {
         val required = listOf(
             "auth-status.js",
             "auth-hide-social.js",
-            "auth-prefer-password.js",
-            "auth-passkey-only.js",
+            "auth-choose-2fa-method.js",
+            "auth-detect-unsupported-2fa.js",
             "coinbase-balance-queries.js",
             "dom-helpers.js",
             "get-balance.js",

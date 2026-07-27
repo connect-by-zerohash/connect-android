@@ -2,6 +2,7 @@ package xyz.connect.sdk.automation
 
 import android.app.Activity
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -52,9 +53,6 @@ internal object Coinbase : AuthFlow, BalanceFlow, DepositFlow, WithdrawFlow {
 
     /** The send flow is driven from /home (iOS `Coinbase.withdrawURL`). */
     override val withdrawUrl = HOME_URL
-
-    /** dom-helpers + withdraw.js (both idempotent); read once, reused per call. */
-    private var withdrawPreludeCache: String? = null
 
     /**
      * Detects whether the embedded WebView session is logged in to Coinbase.
@@ -155,10 +153,10 @@ internal object Coinbase : AuthFlow, BalanceFlow, DepositFlow, WithdrawFlow {
         return balances
     }
 
-    private fun parseBalances(obj: JSONObject): List<AssetBalance> {
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    internal fun parseBalances(obj: JSONObject): List<AssetBalance> {
         val rows = obj.optJSONArray("balances")
             ?: throw PlatformException("invalid balance JS return: no 'balances' array")
-        fun JSONObject.strOrNull(k: String) = if (isNull(k)) null else getString(k)
         return (0 until rows.length()).map { i ->
             val row = rows.getJSONObject(i)
             AssetBalance(
@@ -166,8 +164,8 @@ internal object Coinbase : AuthFlow, BalanceFlow, DepositFlow, WithdrawFlow {
                 label = row.getString("label"),
                 amount = row.getString("amount"),
                 notional = row.getString("notional"),
-                currency = row.strOrNull("currency"),
-                totalStakedPercent = row.strOrNull("totalStakedPercent"),
+                currency = row.optStringOrNull("currency"),
+                totalStakedPercent = row.optStringOrNull("totalStakedPercent"),
                 precision = if (row.isNull("precision")) null else row.optInt("precision"),
                 extractedAt = row.getString("extractedAt"),
             )
@@ -227,7 +225,8 @@ internal object Coinbase : AuthFlow, BalanceFlow, DepositFlow, WithdrawFlow {
      * the web reads `address`+`destinationTag`; `amountSubmitted` is passed through
      * verbatim. Add the enum check if a consumer starts relying on it.
      */
-    private fun mapDepositResult(raw: JSONObject, payloadJson: String): JSONObject {
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    internal fun mapDepositResult(raw: JSONObject, payloadJson: String): JSONObject {
         val address = raw.optString("address")
         if (address.isEmpty()) throw PlatformException("invalid deposit result: missing address")
         val payload = runCatching { JSONObject(payloadJson) }.getOrNull()
@@ -300,8 +299,8 @@ internal object Coinbase : AuthFlow, BalanceFlow, DepositFlow, WithdrawFlow {
         return JSONObject().put("cancelled", raw?.optBoolean("cancelled", false) ?: false)
     }
 
+    /** dom-helpers + withdraw.js (both idempotent). Each asset is read+decoded once
+     *  per process by [readAutomationAsset]'s cache, so no local cache is needed. */
     private fun withdrawPrelude(session: AutomationSession): String =
-        withdrawPreludeCache ?: (
-            session.asset("automation/dom-helpers.js") + "\n" + session.asset("automation/withdraw.js")
-        ).also { withdrawPreludeCache = it }
+        session.asset("automation/dom-helpers.js") + "\n" + session.asset("automation/withdraw.js")
 }
