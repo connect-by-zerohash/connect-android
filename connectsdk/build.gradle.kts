@@ -2,6 +2,8 @@ plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
     id("maven-publish")
+    // Maven Central publishing; applied only under -PmavenCentralRelease (below).
+    id("com.vanniktech.maven.publish") version "0.30.0" apply false
 }
 
 android {
@@ -15,9 +17,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
 
-        // Exposes the SDK version at runtime for the automation bridge's
-        // core.ping reply (mirrors iOS `ConnectSDK.version`). Same single source
-        // of truth as the publishing block: the git tag via -PSDK_VERSION.
+        // SDK version at runtime for the automation bridge's core.ping reply.
         buildConfigField(
             "String",
             "SDK_VERSION",
@@ -93,26 +93,65 @@ dependencies {
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
 }
 
-publishing {
-    publications {
-        create<MavenPublication>("release") {
-            // groupId / artifactId are advisory — JitPack overrides them with
-            // `com.github.connect-by-zerohash` / `connect-android` (derived
-            // from the public mirror's GitHub path) when it resolves the
-            // artifact for customers. Local `publishToMavenLocal` runs (and
-            // ad-hoc Sonatype usage if we ever pivot to Maven Central) still
-            // see these values.
-            groupId = "xyz.connect"
-            artifactId = "connect-sdk"
+// Artifact version comes from the git tag via -PSDK_VERSION; SNAPSHOT locally.
+val sdkVersion = (findProperty("SDK_VERSION") as? String) ?: "0.0.0-SNAPSHOT"
 
-            // Single source of truth = git tag. JitPack forwards the resolved
-            // tag via -PSDK_VERSION=$VERSION (see jitpack.yml); fall back to
-            // a SNAPSHOT marker for local `publishToMavenLocal` runs so the
-            // build doesn't fail when the property is absent.
-            version = (findProperty("SDK_VERSION") as? String) ?: "0.0.0-SNAPSHOT"
+// -PmavenCentralRelease: signed Central Portal publish (workflow only).
+// Default (no flag): unsigned maven-publish path below, used by JitPack.
+if (project.hasProperty("mavenCentralRelease")) {
+    apply(plugin = "com.vanniktech.maven.publish")
 
-            afterEvaluate {
-                from(components["release"])
+    configure<com.vanniktech.maven.publish.MavenPublishBaseExtension> {
+        // Staging deployment, released by hand in the Portal UI.
+        publishToMavenCentral(
+            com.vanniktech.maven.publish.SonatypeHost.CENTRAL_PORTAL,
+            automaticRelease = false,
+        )
+        signAllPublications()
+
+        coordinates("xyz.connect", "connect-android", sdkVersion)
+        configure(com.vanniktech.maven.publish.AndroidSingleVariantLibrary("release"))
+
+        // url/scm point at the public mirror. All fields required by Central.
+        pom {
+            name.set("Connect Android SDK")
+            description.set("Connect SDK for Android — drop-in native integration for the Connect Auth, Recovery, and Withdrawal flows.")
+            url.set("https://github.com/connect-by-zerohash/connect-android")
+            // Proprietary license; `name` matches the LICENSE file heading.
+            licenses {
+                license {
+                    name.set("zerohash Android Wrapper License")
+                    url.set("https://github.com/connect-by-zerohash/connect-android/blob/main/LICENSE")
+                    distribution.set("repo")
+                }
+            }
+            developers {
+                developer {
+                    id.set("zerohash")
+                    name.set("zerohash")
+                    email.set("security@zerohash.com")
+                }
+            }
+            scm {
+                url.set("https://github.com/connect-by-zerohash/connect-android")
+                connection.set("scm:git:https://github.com/connect-by-zerohash/connect-android.git")
+                developerConnection.set("scm:git:ssh://git@github.com/connect-by-zerohash/connect-android.git")
+            }
+        }
+    }
+} else {
+    publishing {
+        publications {
+            create<MavenPublication>("release") {
+                // Advisory locally; JitPack overrides with
+                // com.github.connect-by-zerohash / connect-android.
+                groupId = "xyz.connect"
+                artifactId = "connect-android"
+                version = sdkVersion
+
+                afterEvaluate {
+                    from(components["release"])
+                }
             }
         }
     }

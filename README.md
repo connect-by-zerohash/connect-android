@@ -425,3 +425,8 @@ The theme affects the WebView content, status bar, and navigation appearance.
 For additional support or questions about the Connect platform:
 - [Technical Support](https://zerohash.com/)
 - [Documentation](https://docs.zerohash.com/docs/connect)
+
+## License
+
+Licensed under the zerohash Android Wrapper License — a proprietary license.
+See [`LICENSE`](LICENSE) for the full terms. Questions: legal@zerohash.com.
