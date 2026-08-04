@@ -6,14 +6,21 @@
 
 A Kotlin SDK for seamless integration with the [Connect](https://docs.zerohash.com/docs/connect) product.
 
+The SDK exposes three apps that can be presented from your Android application:
+
+- **Auth** — onboarding, KYC, and deposit flow
+- **Recovery** — account recovery flow with terminal withdrawal
+- **Withdrawal** — standalone withdrawal flow
+
 ## Features
 
-- **Secure OAuth2/OIDC Authentication** - Industry-standard authentication flow via Chrome Custom Tabs
-- **Theme Support** - Light, dark, and system theme options to match your app's design
-- **Android 5.0+ Support** - Compatible with API 21 (Android 5.0) and later versions
-- **Real-time Event Callbacks** - Comprehensive event handling for the deposit flow
-- **Multiple Environments** - Support for both sandbox and production environments
-- **Type-Safe** - Full Kotlin type safety with comprehensive error handling
+- **Three Connect apps** — Auth, Recovery, and Withdrawal exposed through a single SDK
+- **Secure OAuth2/OIDC Authentication** — OAuth flows handled by Chrome Custom Tabs, with an SDK-owned callback receiver
+- **Configurable host allow-list** — restrict the hosts the embedded WebView is allowed to navigate to or load resources from
+- **Theme Support** — Light, dark, and system theme options to match your app's design
+- **Real-time Event Callbacks** — Typed callbacks for each app flow
+- **Multiple Environments** — Sandbox and production environments
+- **Type-Safe** — Full Kotlin type safety with a sealed `ConnectError` hierarchy
 
 ## Requirements
 
@@ -41,7 +48,7 @@ Then add the dependency to your app's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.github.connect-by-zerohash:connect-android:1.0.0")
+    implementation("com.github.connect-by-zerohash:connect-android:1.0.2")
 }
 ```
 
@@ -68,198 +75,200 @@ dependencies {
 import xyz.connect.sdk.ConnectSDK
 ```
 
-### Obtain JWT Token
+### Obtain a JWT Token
 
-Before using the SDK, you'll need to obtain a JWT token from your backend. This token authenticates your app with the Connect platform.
+Before presenting any of the apps, you'll need to obtain a JWT token from
+your backend. This token authenticates the end user with the Connect
+platform.
 
-> **Note:** For detailed instructions on obtaining JWT tokens, please refer to [your company's authentication documentation](#).
+> **Note:** For detailed instructions on obtaining JWT tokens, please refer to the [Connect documentation](https://docs.zerohash.com/docs/connect).
 
-### Basic Configuration
+### OAuth callback
+
+OAuth flows are driven by Chrome Custom Tabs and return to the SDK via the
+`connectsdk-oauth://callback` custom scheme. The intent filter that
+receives the callback is declared in the SDK's own `AndroidManifest.xml`,
+so **no additional manifest configuration is required in the host app**.
+
+### (Optional) Configure the host allow-list
+
+The SDK ships with a built-in allow-list that permits navigations and
+resource loads to `connect.xyz`, `zerohash.com`, and their subdomains.
+You can supply your own list — for example to add a partner-hosted domain,
+or to limit the SDK to a subset of hosts — via `ConnectAllowList`. Host
+matching is exact or via dot-suffix subdomain.
 
 ```kotlin
-// Configure the auth session
-val authSession = ConnectSDK.configureAuth(
-    jwt = "your-jwt-token",
-    environment = Environment.PRODUCTION,  // or Environment.SANDBOX for testing
-    theme = Theme.SYSTEM                   // matches device theme
-)
+val allowList = ConnectAllowList(listOf(
+    "connect.xyz",
+    "zerohash.com",
+    "partner.example.com"
+))
 ```
+
+If you don't pass `allowList`, the SDK uses `ConnectAllowList.DEFAULT`.
 
 ## Usage
 
-### Basic Example
+### Auth
 
-Here's a simple example to get you started with ConnectSDK:
+The Auth app handles onboarding, KYC, and the deposit flow. Use
+`onDeposit` to react to deposit events.
 
 ```kotlin
-import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import xyz.connect.sdk.ConnectSDK
+import xyz.connect.sdk.ConnectError
+import xyz.connect.sdk.Environment
+import xyz.connect.sdk.GenericEvent
+import xyz.connect.sdk.Theme
 import xyz.connect.sdk.auth.AuthCallbacks
+import xyz.connect.sdk.auth.ConnectAuthSession
+import xyz.connect.sdk.auth.DepositEvent
 
-class MainActivity : AppCompatActivity() {
+class AuthActivity : AppCompatActivity() {
 
     private var authSession: ConnectAuthSession? = null
 
-    fun authenticateButtonClicked() {
-        // Configure auth session with minimal setup
-        authSession = ConnectSDK.configureAuth(
-            jwt = "your-jwt-token",
-            callbacks = object : AuthCallbacks {
-                override fun onDeposit(event: DepositEvent) {
-                    // Handle successful deposit
-                    if (event.success) {
-                        println("Deposit successful!")
-                        println("Deposit ID: ${event.depositId ?: "N/A"}")
-                    }
+    fun startAuthTapped() {
+        val callbacks = object : AuthCallbacks {
+            override fun onClose() { println("Auth closed") }
+
+            override fun onError(error: ConnectError) {
+                println("Auth error: ${error.message}")
+            }
+
+            override fun onEvent(event: GenericEvent) {
+                println("Auth event: ${event.type}")
+            }
+
+            override fun onDeposit(deposit: DepositEvent) {
+                if (deposit.success) {
+                    println("Deposit ${deposit.depositId ?: "?"} processed")
+                } else {
+                    println("Deposit status: ${deposit.status ?: "unknown"}")
                 }
             }
+        }
+
+        authSession = ConnectSDK.configureAuth(
+            jwt = "your-jwt-token",
+            environment = Environment.PRODUCTION,
+            theme = Theme.SYSTEM,
+            callbacks = callbacks
         )
 
-        // Present the authentication UI
         authSession?.present(this)
     }
 }
 ```
 
-### Complete Example
+### Recovery
 
-Here's a comprehensive example showcasing all available features and callbacks:
+The Recovery app drives the account-recovery experience and emits a
+withdrawal event when the recovering user completes the terminal
+withdrawal step.
 
 ```kotlin
-import android.os.Bundle
-import android.util.Log
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import xyz.connect.sdk.ConnectSDK
-import xyz.connect.sdk.Environment
-import xyz.connect.sdk.Theme
-import xyz.connect.sdk.auth.AuthCallbacks
-import xyz.connect.sdk.auth.DepositEvent
 import xyz.connect.sdk.ConnectError
+import xyz.connect.sdk.Environment
 import xyz.connect.sdk.GenericEvent
+import xyz.connect.sdk.Theme
+import xyz.connect.sdk.recovery.ConnectRecoverySession
+import xyz.connect.sdk.recovery.RecoveryCallbacks
+import xyz.connect.sdk.withdrawal.WithdrawalEvent
 
-class AuthenticationActivity : AppCompatActivity() {
+class RecoveryActivity : AppCompatActivity() {
 
-    private var authSession: ConnectAuthSession? = null
+    private var recoverySession: ConnectRecoverySession? = null
 
-    fun startAuthentication() {
-        // Configure callbacks for all events
-        val callbacks = object : AuthCallbacks {
-            override fun onClose() {
-                // Handle session closure
-                Log.d("Connect", "Authentication session closed")
-                handleSessionClosed()
-            }
+    fun startRecoveryTapped() {
+        val callbacks = object : RecoveryCallbacks {
+            override fun onClose() { println("Recovery closed") }
 
             override fun onError(error: ConnectError) {
-                // Handle errors with detailed information
-                Log.e("Connect", "Error occurred: ${error.message}")
-                Log.e("Connect", "Error code: ${error.code}")
-
-                // Access additional error data if needed
-                error.data["additionalInfo"]?.let {
-                    Log.e("Connect", "Additional info: $it")
-                }
-
-                showErrorAlert(error.message)
+                println("Recovery error: ${error.message}")
             }
 
             override fun onEvent(event: GenericEvent) {
-                // Handle generic events
-                Log.d("Connect", "Event received: ${event.type}")
-
-                // Access event data using convenience methods
-                event.getString("userId")?.let { userId ->
-                    Log.d("Connect", "User ID: $userId")
-                }
-
-                event.getBool("verified")?.let { isVerified ->
-                    Log.d("Connect", "Verification status: $isVerified")
-                }
+                println("Recovery event: ${event.type}")
             }
 
-            override fun onDeposit(deposit: DepositEvent) {
-                // Handle deposit completion
-                Log.d("Connect", "Deposit event received")
-
-                if (deposit.success) {
-                    // Deposit was successful
-                    Log.d("Connect", "Deposit successful!")
-                    Log.d("Connect", "Deposit ID: ${deposit.depositId ?: "N/A"}")
-                    Log.d("Connect", "Asset: ${deposit.assetId ?: "N/A"}")
-                    Log.d("Connect", "Network: ${deposit.networkId ?: "N/A"}")
-                    Log.d("Connect", "Amount: ${deposit.amount ?: "N/A"}")
-
-                    handleSuccessfulDeposit(deposit)
+            override fun onWithdrawal(withdrawal: WithdrawalEvent) {
+                if (withdrawal.success) {
+                    println("Recovery withdrawal ${withdrawal.withdrawalId ?: "?"} processed")
                 } else {
-                    // Deposit failed or is pending
-                    Log.d("Connect", "Deposit status: ${deposit.status ?: "unknown"}")
+                    println("Recovery withdrawal status: ${withdrawal.status ?: "unknown"}")
                 }
-
-                // Access raw data if needed
-                Log.d("Connect", "Raw deposit data: ${deposit.rawData}")
             }
         }
 
-        // Configure auth session with all options
-        authSession = ConnectSDK.configureAuth(
-            jwt = getJWTToken(),
-            environment = if (isDevelopment()) Environment.SANDBOX else Environment.PRODUCTION,
-            theme = getUserPreferredTheme(),
+        recoverySession = ConnectSDK.configureRecovery(
+            jwt = "your-jwt-token",
+            environment = Environment.PRODUCTION,
+            theme = Theme.SYSTEM,
             callbacks = callbacks
         )
 
-        // Present the authentication UI
-        authSession?.present(this)?.let { session ->
-            Log.d("Connect", "Session ID: ${session.id}")
-            Log.d("Connect", "Session created at: ${session.createdAt}")
+        recoverySession?.present(this)
+    }
+}
+```
 
-            // You can check session state
-            if (session.isActive) {
-                Log.d("Connect", "Session is active")
+### Withdrawal
+
+The Withdrawal app is the standalone withdrawal flow. It shares the
+`WithdrawalEvent` payload with Recovery.
+
+```kotlin
+import androidx.appcompat.app.AppCompatActivity
+import xyz.connect.sdk.ConnectSDK
+import xyz.connect.sdk.ConnectError
+import xyz.connect.sdk.Environment
+import xyz.connect.sdk.GenericEvent
+import xyz.connect.sdk.Theme
+import xyz.connect.sdk.withdrawal.ConnectWithdrawalSession
+import xyz.connect.sdk.withdrawal.WithdrawalCallbacks
+import xyz.connect.sdk.withdrawal.WithdrawalEvent
+
+class WithdrawalActivity : AppCompatActivity() {
+
+    private var withdrawalSession: ConnectWithdrawalSession? = null
+
+    fun startWithdrawalTapped() {
+        val callbacks = object : WithdrawalCallbacks {
+            override fun onClose() { println("Withdrawal closed") }
+
+            override fun onError(error: ConnectError) {
+                println("Withdrawal error: ${error.message}")
+            }
+
+            override fun onEvent(event: GenericEvent) {
+                println("Withdrawal event: ${event.type}")
+            }
+
+            override fun onWithdrawal(withdrawal: WithdrawalEvent) {
+                if (withdrawal.success) {
+                    println("Withdrawal ${withdrawal.withdrawalId ?: "?"} processed")
+                    println("Asset: ${withdrawal.assetId ?: "N/A"}")
+                    println("Network: ${withdrawal.networkId ?: "N/A"}")
+                    println("Amount: ${withdrawal.amount ?: "N/A"}")
+                } else {
+                    println("Withdrawal status: ${withdrawal.status ?: "unknown"}")
+                }
             }
         }
-    }
 
-    // Helper methods
-    private fun getJWTToken(): String {
-        // Fetch JWT from your backend
-        return "your-jwt-token"
-    }
+        withdrawalSession = ConnectSDK.configureWithdrawal(
+            jwt = "your-jwt-token",
+            environment = Environment.PRODUCTION,
+            theme = Theme.SYSTEM,
+            callbacks = callbacks
+        )
 
-    private fun isDevelopment(): Boolean {
-        return BuildConfig.DEBUG
-    }
-
-    private fun getUserPreferredTheme(): Theme {
-        // Return user's theme preference
-        // This example returns system theme
-        return Theme.SYSTEM
-    }
-
-    private fun handleSessionClosed() {
-        // Clean up after session closes
-        authSession = null
-    }
-
-    private fun handleSuccessfulDeposit(deposit: DepositEvent) {
-        // Navigate to success screen or update UI
-        // This is called when a deposit is successfully processed
-    }
-
-    private fun showErrorAlert(message: String) {
-        AlertDialog.Builder(this)
-            .setTitle("Error")
-            .setMessage(message)
-            .setPositiveButton("OK", null)
-            .show()
-    }
-
-    // Cancel the session if needed
-    fun cancelAuthentication() {
-        authSession?.cancel()
-        authSession = null
+        withdrawalSession?.present(this)
     }
 }
 ```
@@ -268,54 +277,63 @@ class AuthenticationActivity : AppCompatActivity() {
 
 ### ConnectSDK
 
-The main entry point for the SDK.
+The main entry point for the SDK. All three configure methods follow the
+same shape; only the callbacks interface and the returned session type
+differ.
 
-#### `configureAuth(jwt, environment, theme, callbacks)`
+#### `configureAuth(jwt, environment, theme, allowList, callbacks)`
 
-Configures an authentication session that can be presented later.
+Configures an Auth session that can be presented later. Returns a
+`ConnectAuthSession`.
 
-**Parameters:**
-- `jwt: String` - JWT token for authentication
-- `environment: Environment` - Target environment (default: `Environment.PRODUCTION`)
-  - `Environment.SANDBOX` - For testing and development
-  - `Environment.PRODUCTION` - For production use
-- `theme: Theme` - UI theme (default: `Theme.SYSTEM`)
-  - `Theme.LIGHT` - Light theme
-  - `Theme.DARK` - Dark theme
-  - `Theme.SYSTEM` - Follows device theme
-- `callbacks: AuthCallbacks` - Event callbacks (default: empty callbacks)
+#### `configureRecovery(jwt, environment, theme, allowList, callbacks)`
 
-**Returns:** `ConnectAuthSession` - A configured session ready to be presented
+Configures a Recovery session that can be presented later. Returns a
+`ConnectRecoverySession`.
 
-### ConnectAuthSession
+#### `configureWithdrawal(jwt, environment, theme, allowList, callbacks)`
 
-Manages the authentication session lifecycle.
+Configures a Withdrawal session that can be presented later. Returns a
+`ConnectWithdrawalSession`.
 
-#### `present(activity)`
+**Shared parameters:**
 
-Presents the authentication UI from the specified activity.
+| Parameter     | Type                                                            | Default                    | Description                                                        |
+| ------------- | --------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------ |
+| `jwt`         | `String`                                                        | —                          | JWT token authenticating the end user                              |
+| `environment` | `Environment`                                                   | `Environment.PRODUCTION`   | `SANDBOX` or `PRODUCTION`                                          |
+| `theme`       | `Theme`                                                         | `Theme.SYSTEM`             | `LIGHT`, `DARK`, or `SYSTEM`                                       |
+| `allowList`   | `ConnectAllowList`                                              | `ConnectAllowList.DEFAULT` | Hosts the WebView may navigate to / load resources from            |
+| `callbacks`   | `AuthCallbacks` / `RecoveryCallbacks` / `WithdrawalCallbacks`   | —                          | App-specific event callbacks                                       |
 
-**Parameters:**
-- `activity: Activity` - The activity to present from
+### Session types
 
-**Returns:** `ConnectSession?` - The active session if presentation succeeds
+All three session types (`ConnectAuthSession`, `ConnectRecoverySession`,
+`ConnectWithdrawalSession`) share the same lifecycle:
+
+#### `present(activity: Activity): ConnectSession?`
+
+Presents the UI from the specified activity. Returns the created
+`ConnectSession`, or `null` if the session has already been presented or
+the JWT failed validation. When JWT validation fails, `onError` is invoked
+with a `ConnectError.ConfigurationError`.
 
 #### `cancel()`
 
-Cancels the authentication session if it's active.
+Cancels the session if it is active, and triggers the `onClose` callback.
 
-#### `isActive`
+#### `isActive(): Boolean`
 
-A boolean property indicating whether the session is currently active.
+Returns `true` while the session is running.
 
-### Types and Enums
+### Types
 
 #### Environment
 
 ```kotlin
 enum class Environment {
-    SANDBOX,    // Testing environment
-    PRODUCTION  // Production environment
+    SANDBOX,     // Testing environment
+    PRODUCTION   // Production environment
 }
 ```
 
@@ -329,28 +347,62 @@ enum class Theme {
 }
 ```
 
-#### AuthCallbacks
-
-Interface containing all available callback handlers:
+#### ConnectAllowList
 
 ```kotlin
-interface AuthCallbacks {
+class ConnectAllowList(val hosts: List<String>) {
+    companion object {
+        /** Default allow-list shipped with the SDK: connect.xyz + zerohash.com */
+        val DEFAULT: ConnectAllowList
+    }
+}
+```
+
+Host matching is exact, or via dot-suffix subdomain — `connect.xyz`
+matches `sdk.connect.xyz` but not `evilconnect.xyz`.
+
+#### AuthCallbacks
+
+```kotlin
+interface AuthCallbacks : AppCallbacks {
+    fun onDeposit(event: DepositEvent)
+}
+```
+
+#### RecoveryCallbacks
+
+```kotlin
+interface RecoveryCallbacks : AppCallbacks {
+    fun onWithdrawal(event: WithdrawalEvent) {}
+}
+```
+
+#### WithdrawalCallbacks
+
+```kotlin
+interface WithdrawalCallbacks : AppCallbacks {
+    fun onWithdrawal(event: WithdrawalEvent) {}
+}
+```
+
+Each of the above extends the base `AppCallbacks`:
+
+```kotlin
+interface AppCallbacks {
     fun onClose()
     fun onError(error: ConnectError)
     fun onEvent(event: GenericEvent)
-    fun onDeposit(event: DepositEvent)
 }
 ```
 
 ## Callbacks and Events
 
-See all callback payloads in our [documentation](https://docs.zerohash.com/docs/front-end-implementation-guide#shared-callbacks)
+See all callback payloads in the
+[Connect documentation](https://docs.zerohash.com/docs/front-end-implementation-guide#shared-callbacks).
 
-### onDeposit
+### onDeposit (Auth only)
 
-Called when a deposit event occurs during the authentication flow.
-
-**DepositEvent Properties:**
+Called when a deposit event occurs during the Auth flow.
 
 ```kotlin
 deposit.depositId    // String? - Unique deposit identifier
@@ -362,63 +414,80 @@ deposit.amount       // String? - Amount deposited
 deposit.rawData      // JSONObject? - Raw event data
 ```
 
-### onError
+### onWithdrawal (Recovery and Withdrawal)
 
-Called when an error occurs during the authentication process.
-
-**ConnectError Properties:**
+Called when a withdrawal event occurs during the Recovery or Withdrawal flow.
 
 ```kotlin
-error.code        // String - Error code
-error.message     // String - Human-readable error message
-error.data        // Map<String, Any> - Additional error details
-error.timestamp   // Long - When the error occurred (Unix timestamp)
+withdrawal.withdrawalId  // String? - Unique withdrawal identifier
+withdrawal.status        // String? - Current withdrawal status
+withdrawal.success       // Boolean - True when status resolves to "processed"
+withdrawal.assetId       // String? - Asset ticker (BTC, ETH, USDC, etc.)
+withdrawal.networkId     // String? - Network/chain used
+withdrawal.amount        // String? - Amount withdrawn
+withdrawal.rawData       // JSONObject? - Raw event data
+```
+
+### onError
+
+Called when an error occurs during any of the flows. `ConnectError` is a
+sealed class — branch on its subtype to react to specific failure modes.
+
+```kotlin
+sealed class ConnectError : Exception() {
+    data class NetworkError(override val message: String) : ConnectError()
+    data class AuthenticationError(override val message: String) : ConnectError()
+    data class ConfigurationError(override val message: String) : ConnectError()
+    data class WebViewError(override val message: String) : ConnectError()
+    data class OAuthError(override val message: String) : ConnectError()
+    data class UnknownError(override val message: String) : ConnectError()
+}
 ```
 
 ### onEvent
 
-Called for generic events during the authentication flow. [Documentation](https://docs.zerohash.com/docs/front-end-implementation-guide#shared-callbacks)
-
-**GenericEvent Properties:**
+Called for generic events during the flow. [Documentation](https://docs.zerohash.com/docs/front-end-implementation-guide#shared-callbacks).
 
 ```kotlin
 event.type                    // String - Event type identifier
-event.data                    // Map<String, Any> - Event data
+event.data                    // JSONObject? - Event data
 event.getString("key")        // String? - Get string value
 event.getInt("key")           // Int? - Get integer value
 event.getBool("key")          // Boolean? - Get boolean value
-event.getObject("key")        // Map<String, Any>? - Get nested object
+event.getObject("key")        // JSONObject? - Get nested object
 event.getDouble("key")        // Double? - Get double value
 ```
 
 ### onClose
 
-Called when the authentication session is closed by the user or programmatically.
+Called when the session is closed by the user or programmatically via
+`cancel()`.
 
 ## Themes and Customization
 
 ### Setting Theme
 
-The SDK supports three theme options:
+The SDK supports three theme options across all three apps:
 
 ```kotlin
 // Light theme
-val session = ConnectSDK.configureAuth(jwt = token, theme = Theme.LIGHT)
+ConnectSDK.configureAuth(jwt = token, theme = Theme.LIGHT, callbacks = callbacks)
 
 // Dark theme
-val session = ConnectSDK.configureAuth(jwt = token, theme = Theme.DARK)
+ConnectSDK.configureAuth(jwt = token, theme = Theme.DARK, callbacks = callbacks)
 
-// System theme (default) - automatically matches device settings
-val session = ConnectSDK.configureAuth(jwt = token, theme = Theme.SYSTEM)
+// System theme (default) — matches device settings
+ConnectSDK.configureAuth(jwt = token, theme = Theme.SYSTEM, callbacks = callbacks)
 ```
 
 ### Theme Behavior
 
-- **`Theme.SYSTEM`** - Automatically switches between light and dark based on device settings
-- **`Theme.LIGHT`** - Forces light theme regardless of device settings
-- **`Theme.DARK`** - Forces dark theme regardless of device settings
+- **`Theme.SYSTEM`** — Automatically switches between light and dark based on device settings
+- **`Theme.LIGHT`** — Forces light theme regardless of device settings
+- **`Theme.DARK`** — Forces dark theme regardless of device settings
 
-The theme affects the WebView content, status bar, and navigation appearance.
+The theme applies to the WebView content, status bar, and navigation
+appearance.
 
 ## Contact
 
