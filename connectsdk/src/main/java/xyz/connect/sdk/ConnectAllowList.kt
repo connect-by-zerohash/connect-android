@@ -22,7 +22,20 @@ class ConnectAllowList(val hosts: List<String>) {
          * Covers all Connect web-app and zerohash domains.
          */
         @JvmField
-        val DEFAULT = ConnectAllowList(listOf("connect.xyz", "zerohash.com"))
+        val DEFAULT =
+            ConnectAllowList(
+                listOf(
+                    "connect.xyz",
+                    "zerohash.com",
+                    // Dynamic powers the self-custody wallet list and connect flow;
+                    // these cover its API, logging, WalletConnect relay, and assets.
+                    "dynamicauth.com",
+                    "dynamic-static-assets.com",
+                    "dynamic.xyz",
+                    // TON Connect wallet registry, required for TON wallets.
+                    "ton.org",
+                ),
+            )
     }
 
     /**

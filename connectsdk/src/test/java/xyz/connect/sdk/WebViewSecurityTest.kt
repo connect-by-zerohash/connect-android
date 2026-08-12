@@ -303,6 +303,15 @@ class WebViewSecurityTest {
     }
 
     @Test
+    fun `dynamic and ton hosts are in default list`() {
+        assertTrue(defaultList.contains("app.dynamicauth.com"))
+        assertTrue(defaultList.contains("logs.dynamicauth.com"))
+        assertTrue(defaultList.contains("dynamic-static-assets.com"))
+        assertTrue(defaultList.contains("dynamic.xyz"))
+        assertTrue(defaultList.contains("config.ton.org"))
+    }
+
+    @Test
     fun `unrelated domain is rejected`() {
         assertFalse(defaultList.contains("attacker.com"))
     }
