@@ -43,7 +43,13 @@ data class WithdrawalEvent(
             return WithdrawalEvent(
                 withdrawalId = data?.optStringOrNull("withdrawalId"),
                 status = statusValue,
-                success = statusValue?.lowercase() == "processed",
+                // A withdrawal's terminal success value is CONFIRMED, not
+                // PROCESSED (the web SDK's WithdrawalStatusValue.COMPLETED is the
+                // string 'CONFIRMED', and its polling stops only at CONFIRMED or
+                // FAILED). Comparing against "processed" alone made this false
+                // for every successful withdrawal. "processed" is still accepted
+                // so nothing which somehow matched it before regresses.
+                success = statusValue?.lowercase() in setOf("confirmed", "processed"),
                 assetId = data?.optStringOrNull("assetId"),
                 networkId = data?.optStringOrNull("networkId"),
                 amount = data?.optStringOrNull("amount"),

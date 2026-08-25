@@ -28,6 +28,8 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "ConnectDemo"
+        private const val PREFS = "demo-prefs"
+        private const val KEY_DEV_MODE = "devModeEnabled"
         private const val DEMO_JWT = "your-jwt-token-here"
     }
 
@@ -40,6 +42,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupUI() {
+        setupDevMode()
+
         binding.etJwt.setText(DEMO_JWT)
 
         binding.rgSdk.setOnCheckedChangeListener { _, checkedId ->
@@ -109,23 +113,23 @@ class MainActivity : AppCompatActivity() {
             theme = theme,
             callbacks = object : AuthCallbacks {
                 override fun onClose() {
-                    addLog("Session closed")
+                    addLog("onClose")
                     showToast("Session closed")
                     authSession = null
                 }
 
                 override fun onError(error: ConnectError) {
                     Log.e(TAG, "Auth error: ${error.message}")
-                    addLog("Error: ${error.message}")
+                    addLog("onError: $error")
                     showToast("Error: ${error.message}")
                 }
 
                 override fun onEvent(event: GenericEvent) {
-                    addLog("Event: ${event.type}")
+                    addLog("onEvent: $event")
                 }
 
                 override fun onDeposit(event: DepositEvent) {
-                    addLog("Deposit: ${event.depositId} (${event.status})")
+                    addLog("onDeposit: $event")
                     showToast(if (event.success) "Deposit successful" else "Deposit failed")
                 }
             }
@@ -142,23 +146,23 @@ class MainActivity : AppCompatActivity() {
             theme = theme,
             callbacks = object : RecoveryCallbacks {
                 override fun onClose() {
-                    addLog("Session closed")
+                    addLog("onClose")
                     showToast("Session closed")
                     recoverySession = null
                 }
 
                 override fun onError(error: ConnectError) {
                     Log.e(TAG, "Recovery error: ${error.message}")
-                    addLog("Error: ${error.message}")
+                    addLog("onError: $error")
                     showToast("Error: ${error.message}")
                 }
 
                 override fun onEvent(event: GenericEvent) {
-                    addLog("Event: ${event.type}")
+                    addLog("onEvent: $event")
                 }
 
                 override fun onWithdrawal(event: WithdrawalEvent) {
-                    addLog("Withdrawal: ${event.withdrawalId} (${event.status})")
+                    addLog("onWithdrawal: $event")
                     showToast(if (event.success) "Withdrawal successful" else "Withdrawal failed")
                 }
             }
@@ -175,23 +179,23 @@ class MainActivity : AppCompatActivity() {
             theme = theme,
             callbacks = object : WithdrawalCallbacks {
                 override fun onClose() {
-                    addLog("Session closed")
+                    addLog("onClose")
                     showToast("Session closed")
                     withdrawalSession = null
                 }
 
                 override fun onError(error: ConnectError) {
                     Log.e(TAG, "Withdrawal error: ${error.message}")
-                    addLog("Error: ${error.message}")
+                    addLog("onError: $error")
                     showToast("Error: ${error.message}")
                 }
 
                 override fun onEvent(event: GenericEvent) {
-                    addLog("Event: ${event.type}")
+                    addLog("onEvent: $event")
                 }
 
                 override fun onWithdrawal(event: WithdrawalEvent) {
-                    addLog("Withdrawal: ${event.withdrawalId} (${event.status})")
+                    addLog("onWithdrawal: $event")
                     showToast(if (event.success) "Withdrawal successful" else "Withdrawal failed")
                 }
             }
@@ -201,6 +205,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun addLog(message: String) {
+        // Mirrored to Logcat because the SDK runs in its own Activity, which covers
+        // this one: the on-screen log is only readable after the flow closes, so
+        // `adb logcat -s $TAG` is the only way to watch events as they fire.
+        Log.d(TAG, message)
+        DevPanel.log(message)
         runOnUiThread {
             val currentLog = binding.tvLog.text.toString()
             val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
@@ -216,10 +225,35 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Returning from the system overlay-permission screen: attach now that it
+        // may have been granted. Never requests — that would bounce straight back
+        // out to settings and trap the app in a loop.
+        if (binding.cbDevMode.isChecked) DevPanel.setEnabled(this, true)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         authSession?.cancel()
         recoverySession?.cancel()
         withdrawalSession?.cancel()
+        DevPanel.detach()
+    }
+
+    /**
+     * Dev mode gates the floating event log. Off by default and persisted, so the
+     * app can be demoed with no debug UI on screen.
+     */
+    private fun setupDevMode() {
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        binding.cbDevMode.isChecked = prefs.getBoolean(KEY_DEV_MODE, false)
+        DevPanel.setEnabled(this, binding.cbDevMode.isChecked)
+
+        binding.cbDevMode.setOnCheckedChangeListener { _, checked ->
+            prefs.edit().putBoolean(KEY_DEV_MODE, checked).apply()
+            // Only the toggle may send the user to the permission screen.
+            DevPanel.setEnabled(this, checked, requestPermission = true)
+        }
     }
 }

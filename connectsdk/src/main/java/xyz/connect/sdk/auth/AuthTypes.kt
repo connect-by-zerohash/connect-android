@@ -39,17 +39,26 @@ data class DepositEvent(
     val rawData: JSONObject?
 ) {
     companion object {
+        private fun JSONObject.optStringOrNull(key: String): String? =
+            if (has(key) && !isNull(key)) getString(key) else null
+
         /**
-         * Parse deposit event from JSON data
+         * Parse deposit event from JSON data.
+         *
+         * `status` arrives as an object (`{ value, details, occurredAt }`) and
+         * there is no flat `success` field, so both are derived from
+         * `status.value`. Matches
+         * how [WithdrawalEvent] and connect-ios parse the same shape.
          */
         fun fromJSON(data: JSONObject?): DepositEvent {
+            val statusValue = data?.optJSONObject("status")?.optStringOrNull("value")
             return DepositEvent(
-                depositId = data?.optString("depositId"),
-                status = data?.optString("status"),
-                success = data?.optBoolean("success") ?: false,
-                assetId = data?.optString("assetId"),
-                networkId = data?.optString("networkId"),
-                amount = data?.optString("amount"),
+                depositId = data?.optStringOrNull("depositId"),
+                status = statusValue,
+                success = statusValue?.lowercase() == "processed",
+                assetId = data?.optStringOrNull("assetId"),
+                networkId = data?.optStringOrNull("networkId"),
+                amount = data?.optStringOrNull("amount"),
                 rawData = data
             )
         }
