@@ -312,6 +312,13 @@ class WebViewSecurityTest {
     }
 
     @Test
+    fun `walletconnect and reown hosts are in default list`() {
+        assertTrue(defaultList.contains("relay.walletconnect.org"))
+        assertTrue(defaultList.contains("verify.walletconnect.com"))
+        assertTrue(defaultList.contains("api.web3modal.org"))
+    }
+
+    @Test
     fun `unrelated domain is rejected`() {
         assertFalse(defaultList.contains("attacker.com"))
     }

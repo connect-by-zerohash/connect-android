@@ -28,10 +28,17 @@ class ConnectAllowList(val hosts: List<String>) {
                     "connect.xyz",
                     "zerohash.com",
                     // Dynamic powers the self-custody wallet list and connect flow;
-                    // these cover its API, logging, WalletConnect relay, and assets.
+                    // these cover its API, logging, and assets.
                     "dynamicauth.com",
                     "dynamic-static-assets.com",
                     "dynamic.xyz",
+                    // WalletConnect v2 / Reown endpoints brokered by Dynamic:
+                    // relay, verify, pulse, rpc on both .org and .com mirrors.
+                    "walletconnect.org",
+                    "walletconnect.com",
+                    // Reown wallet catalog (api.web3modal.org) — required for
+                    // the wallet list to render.
+                    "web3modal.org",
                     // TON Connect wallet registry, required for TON wallets.
                     "ton.org",
                 ),
