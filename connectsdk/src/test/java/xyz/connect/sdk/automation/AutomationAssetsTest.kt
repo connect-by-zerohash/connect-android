@@ -26,6 +26,7 @@ class AutomationAssetsTest {
             "get-balance.js",
             "get-deposit-address.js",
             "withdraw.js",
+            "telemetry.js",
         )
         for (name in required) {
             val f = File(assetDir, name)

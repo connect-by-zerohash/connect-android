@@ -7,7 +7,6 @@ import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
-import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -83,7 +82,7 @@ internal class AutomationSession(
             override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean =
                 blockOffCoinbaseNavigation(url, isMainFrame = true, TAG)
         }
-        wv.webChromeClient = WebChromeClient()
+        wv.webChromeClient = MediaCaptureChromeClient(activity)
 
         val container = FrameLayout(activity)
         container.addView(wv, matchParent())
@@ -124,7 +123,8 @@ internal class AutomationSession(
         pending[id] = deferred
 
         val argDecl = if (argName != null) "var $argName = $argJson;" else ""
-        val wrapped = buildPromiseWrapper(BRIDGE, id, prelude, argDecl, entryExpr)
+        val telemetryInstall = if (TelemetryRouter.collector != null) asset(TELEMETRY_INSTALL_ASSET) else ""
+        val wrapped = buildPromiseWrapper(BRIDGE, id, prelude, argDecl, entryExpr, telemetryInstall)
 
         // Belt-and-suspenders: refuse to run money-movement automation if the page
         // has somehow landed off Coinbase, even if a navigation slipped past the
@@ -201,6 +201,13 @@ internal class AutomationSession(
     }
 
     private inner class Bridge {
+        /** Injected-realm drafts drained by the wrapper → the in-flight dispatch collector. */
+        @Suppress("UNUSED_PARAMETER")
+        @JavascriptInterface
+        fun onEvents(id: String, json: String?) {
+            TelemetryRouter.collector?.pushDraftsJson(json)
+        }
+
         @JavascriptInterface
         fun onResolve(id: String, json: String?) {
             val d = pending[id] ?: return
