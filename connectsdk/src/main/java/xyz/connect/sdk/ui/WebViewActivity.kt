@@ -21,6 +21,7 @@ import xyz.connect.sdk.CallbackHandler
 import xyz.connect.sdk.ConnectAllowList
 import xyz.connect.sdk.auth.OAuthHandler
 import xyz.connect.sdk.internal.Constants
+import xyz.connect.sdk.internal.padForSystemBarsAndKeyboard
 import xyz.connect.sdk.automation.AutomationBridge
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
@@ -155,6 +156,7 @@ class WebViewActivity : AppCompatActivity(),
             setContentView(container)
 
             configureStatusBar()
+            container.padForSystemBarsAndKeyboard(TAG)
 
             oauthHandler = OAuthHandler(this)
 
