@@ -48,7 +48,7 @@ Then add the dependency to your app's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.github.connect-by-zerohash:connect-android:1.0.2")
+    implementation("com.github.connect-by-zerohash:connect-android:1.1.0")
 }
 ```
 

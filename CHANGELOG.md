@@ -7,16 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-31
+
 ### Added
+- Published to Maven Central as `xyz.connect:connect-android`, signed, on a
+  version-tag push (SEC-7126).
+- Identity/liveness step and SDK telemetry, ported from zerohash-android
+  (AUTH-3907, AUTH-4125).
+- Coinbase automation parity with zerohash-android.
 - Sign in with Apple support in the Coinbase automation login WebView
   (`AuthPopupWindow`), hosting Coinbase's `window.open` Apple popup in a child
   WebView that shares the login cookie jar. Provider-agnostic, so future
   provider logins (e.g. Kraken) reuse it unchanged (AUTH-3437).
+- Dynamic and TON Connect domains in the navigation allow-list (AUTH-3763).
+
+### Changed
+- A hold-blocked withdrawal is rejected as `funds_not_available` instead of
+  timing out (AUTH-4220).
 
 ### Fixed
+- Web content ran under the system bars and the keyboard on host apps targeting
+  SDK 35+, where Android 15+ enforces edge-to-edge. The close button sat beneath
+  the status bar and stopped receiving taps, the deposit amount screen's primary
+  action was hidden behind the keyboard, and the Coinbase login page was clipped
+  with an illegible status bar (AUTH-4319).
+- Five Coinbase gating screens the automation did not recognise (AUTH-4245).
+- Liveness overlay rendering, the liveness microphone, and the funds-on-hold
+  timeout (AUTH-4245, AUTH-4220).
+- WalletConnect relay, verify, and Reown catalog hosts were blocked by the
+  navigation allow-list (AUTH-3763).
+- Deposit success is derived from `status.value` (AUTH-4077).
+- Coinbase BASE network-acceptance warning was not handled (AUTH-3960).
 - Apple social login was previously hidden on Android because the embedded
   login WebView had no `window.open` popup support; the "OR" area on the
   Coinbase login screen appeared empty (AUTH-3437).
+
+### Documentation
+- `INTEGRATION.md` and `EXAMPLE_USAGE.md` advertised the dependency as
+  `xyz.connect:connect-sdk`, an artifact that has never been published. The
+  coordinates are `xyz.connect:connect-android` on Maven Central and
+  `com.github.connect-by-zerohash:connect-android` on JitPack.
 
 ## [1.0.0] - 2024-01-14
 

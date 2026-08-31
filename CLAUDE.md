@@ -206,16 +206,18 @@ No test files currently exist in the repository.
 
 The SDK is configured for Maven publication in `connectsdk/build.gradle.kts`:
 ```kotlin
-publishing {
-    publications {
-        create<MavenPublication>("release") {
-            groupId = "xyz.connect"
-            artifactId = "connect-sdk"
-            version = "1.0.0"
-        }
-    }
-}
+// Signed Central Portal publish, under -PmavenCentralRelease (workflow only).
+coordinates("xyz.connect", "connect-android", sdkVersion)
+
+// Default (no flag): unsigned maven-publish path, used by JitPack.
+groupId = "xyz.connect"
+artifactId = "connect-android"
+version = sdkVersion
 ```
+
+`sdkVersion` comes from `-PSDK_VERSION` (set from the git tag by the release
+workflow) and falls back to `0.0.0-SNAPSHOT` locally. A pushed bare version tag
+(e.g. `1.1.0`, no leading `v`) triggers `publish-maven-central.yml`.
 
 ## Additional Documentation
 

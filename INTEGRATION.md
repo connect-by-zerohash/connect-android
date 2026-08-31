@@ -56,19 +56,25 @@ The SDK includes these dependencies automatically:
 
 Add the Connect SDK to your app's `build.gradle.kts` or `build.gradle`:
 
+The SDK is published to Maven Central, so `mavenCentral()` in your repositories
+is all the setup required.
+
 **Kotlin DSL (`build.gradle.kts`):**
 ```kotlin
 dependencies {
-    implementation("xyz.connect:connect-sdk:1.0.0")
+    implementation("xyz.connect:connect-android:1.1.0")
 }
 ```
 
 **Groovy (`build.gradle`):**
 ```groovy
 dependencies {
-    implementation 'xyz.connect:connect-sdk:1.0.0'
+    implementation 'xyz.connect:connect-android:1.1.0'
 }
 ```
+
+A JitPack mirror is also published as
+`com.github.connect-by-zerohash:connect-android`, documented in the README.
 
 ### Option 2: Local Module
 
