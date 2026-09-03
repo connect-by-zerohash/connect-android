@@ -130,7 +130,7 @@ class MainActivity : AppCompatActivity() {
 
                 override fun onDeposit(event: DepositEvent) {
                     addLog("onDeposit: $event")
-                    showToast(if (event.success) "Deposit successful" else "Deposit failed")
+                    showToast(depositToast(event))
                 }
             }
         )
@@ -223,6 +223,20 @@ class MainActivity : AppCompatActivity() {
         runOnUiThread {
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         }
+    }
+
+    /**
+     * `onDeposit` reports a status, not an outcome — it also fires while the
+     * deposit is pending or account matching is verifying, and can arrive more
+     * than once. Toasting every non-success status as "Deposit failed" reported a
+     * failure for a deposit that was still perfectly healthy.
+     */
+    private fun depositToast(event: DepositEvent): String = when {
+        event.success -> "Deposit successful"
+        event.accountMatchingStatus?.uppercase() in setOf("INVALID", "ERROR") ->
+            "Deposit failed: ${event.accountMatchingReason ?: "account mismatch"}"
+        event.status?.uppercase() in setOf("FAILED", "ACCOUNT_VALIDATION_FAILED") -> "Deposit failed"
+        else -> "Deposit ${event.status ?: "in progress"}"
     }
 
     override fun onResume() {

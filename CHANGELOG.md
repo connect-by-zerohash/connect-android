@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-03
+
+### Fixed
+- `DepositEvent.success` reported `false` for every successful deposit on
+  platforms not running zerohash with auto-convert. The web SDK shows its
+  success screen at `CONFIRMED` (its `DepositStatusValue.COMPLETED` is the
+  string `'CONFIRMED'`), and only at `PROCESSED` when auto-convert is on. That
+  profile flag never reaches the bridge, so both statuses now count as success —
+  the same fix `WithdrawalEvent` already carried. `success` now also honours the
+  account-matching validation the web flow checks first, so `PENDING`
+  (verifying), `INVALID` and `ERROR` no longer report success (AUTH-4336).
+
+### Added
+- `DepositEvent.accountMatchingStatus` and `DepositEvent.accountMatchingReason`,
+  so a host seeing `success == false` can tell a deposit that is still verifying
+  from a name mismatch. On a mismatch that reason is the only explanation
+  available anywhere in the stack. Both are new positional parameters on the
+  `DepositEvent` data class, before `rawData`; nothing outside the SDK is
+  expected to construct one.
+
 ## [1.1.0] - 2026-08-31
 
 ### Added

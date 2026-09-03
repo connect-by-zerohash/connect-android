@@ -62,14 +62,14 @@ is all the setup required.
 **Kotlin DSL (`build.gradle.kts`):**
 ```kotlin
 dependencies {
-    implementation("xyz.connect:connect-android:1.1.0")
+    implementation("xyz.connect:connect-android:1.2.0")
 }
 ```
 
 **Groovy (`build.gradle`):**
 ```groovy
 dependencies {
-    implementation 'xyz.connect:connect-android:1.1.0'
+    implementation 'xyz.connect:connect-android:1.2.0'
 }
 ```
 

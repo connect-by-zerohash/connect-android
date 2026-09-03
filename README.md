@@ -50,7 +50,7 @@ Then add the dependency to your app's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("xyz.connect:connect-android:1.1.0")
+    implementation("xyz.connect:connect-android:1.2.0")
 }
 ```
 
@@ -58,7 +58,7 @@ Or with the Groovy DSL, in `build.gradle`:
 
 ```groovy
 dependencies {
-    implementation 'xyz.connect:connect-android:1.1.0'
+    implementation 'xyz.connect:connect-android:1.2.0'
 }
 ```
 
@@ -414,15 +414,25 @@ See all callback payloads in the
 
 Called when a deposit event occurs during the Auth flow.
 
+`onDeposit` is a **status, not an outcome**. It also fires while account matching
+is verifying, and can arrive more than once for the same deposit, so read the
+outcome off `success` rather than treating the call itself as completion.
+
 ```kotlin
-deposit.depositId    // String? - Unique deposit identifier
-deposit.status       // String? - Current deposit status
-deposit.success      // Boolean - Whether the deposit was successful
-deposit.assetId      // String? - Asset ticker (BTC, ETH, USDC, etc.)
-deposit.networkId    // String? - Network/chain used
-deposit.amount       // String? - Amount deposited
-deposit.rawData      // JSONObject? - Raw event data
+deposit.depositId              // String? - Unique deposit identifier
+deposit.status                 // String? - "CONFIRMED", "PROCESSED", "PENDING", "FAILED", ...
+deposit.success                // Boolean - True at "CONFIRMED" or "PROCESSED", unless
+                               //           account matching is PENDING/INVALID/ERROR
+deposit.assetId                // String? - Asset ticker (BTC, ETH, USDC, etc.)
+deposit.networkId              // String? - Network/chain used
+deposit.amount                 // String? - Amount deposited
+deposit.accountMatchingStatus  // String? - "PENDING", "VALID", "INVALID", "ERROR"
+deposit.accountMatchingReason  // String? - Why account matching failed
+deposit.rawData                // JSONObject? - Raw event data
 ```
+
+A successful deposit reports `CONFIRMED` on most platforms and `PROCESSED` on
+platforms running zerohash with auto-convert; both count as success.
 
 ### onWithdrawal (Recovery and Withdrawal)
 
@@ -431,7 +441,7 @@ Called when a withdrawal event occurs during the Recovery or Withdrawal flow.
 ```kotlin
 withdrawal.withdrawalId  // String? - Unique withdrawal identifier
 withdrawal.status        // String? - Current withdrawal status
-withdrawal.success       // Boolean - True when status resolves to "processed"
+withdrawal.success       // Boolean - True at "CONFIRMED" or "PROCESSED"
 withdrawal.assetId       // String? - Asset ticker (BTC, ETH, USDC, etc.)
 withdrawal.networkId     // String? - Network/chain used
 withdrawal.amount        // String? - Amount withdrawn

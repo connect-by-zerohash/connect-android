@@ -7,7 +7,7 @@
 ```kotlin
 // app/build.gradle.kts
 dependencies {
-    implementation("xyz.connect:connect-android:1.1.0")
+    implementation("xyz.connect:connect-android:1.2.0")
 }
 ```
 
