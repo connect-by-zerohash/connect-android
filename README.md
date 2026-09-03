@@ -2,7 +2,7 @@
 
 ![Kotlin](https://img.shields.io/badge/Kotlin-1.9%2B-purple.svg)
 ![Platform](https://img.shields.io/badge/Platform-Android%205.0%2B-green.svg)
-[![JitPack](https://jitpack.io/v/connect-by-zerohash/connect-android.svg)](https://jitpack.io/#connect-by-zerohash/connect-android)
+[![Maven Central](https://img.shields.io/maven-central/v/xyz.connect/connect-android)](https://central.sonatype.com/artifact/xyz.connect/connect-android)
 
 A Kotlin SDK for seamless integration with the [Connect](https://docs.zerohash.com/docs/connect) product.
 
@@ -30,16 +30,18 @@ The SDK exposes three apps that can be presented from your Android application:
 
 ## Installation
 
-### JitPack
+### Maven Central
 
-Add the JitPack repository to your `settings.gradle.kts`:
+The SDK is published to Maven Central as `xyz.connect:connect-android`. A
+standard Android project already resolves it, so usually there is nothing to add
+to `settings.gradle.kts`. If your repositories block does not list
+`mavenCentral()` yet:
 
 ```kotlin
 dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url = uri("https://jitpack.io") }
     }
 }
 ```
@@ -48,7 +50,15 @@ Then add the dependency to your app's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.github.connect-by-zerohash:connect-android:1.1.0")
+    implementation("xyz.connect:connect-android:1.1.0")
+}
+```
+
+Or with the Groovy DSL, in `build.gradle`:
+
+```groovy
+dependencies {
+    implementation 'xyz.connect:connect-android:1.1.0'
 }
 ```
 

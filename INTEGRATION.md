@@ -73,8 +73,8 @@ dependencies {
 }
 ```
 
-A JitPack mirror is also published as
-`com.github.connect-by-zerohash:connect-android`, documented in the README.
+Maven Central is the supported channel. A JitPack mirror also resolves as
+`com.github.connect-by-zerohash:connect-android`.
 
 ### Option 2: Local Module
 
