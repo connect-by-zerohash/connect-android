@@ -414,6 +414,29 @@
   // the blocking "Review pending transfer" screen instead. Race the two so we
   // recognize the block immediately rather than timing out on the missing
   // recipient input; on the block, throw with the prior transfer's details.
+  function idvGate() {
+    return window.__zhCoinbaseIdv || null;
+  }
+
+  async function idvBlockedReasonForAction(action) {
+    var gate = idvGate();
+    if (!gate) return null;
+    return await gate.blockedReasonForAction(action);
+  }
+
+  async function idvBlockedReasonFromDom() {
+    var gate = idvGate();
+    if (!gate) return null;
+    return await gate.blockedReasonFromVisibleDom();
+  }
+
+  function idvBlockedError(reason) {
+    var e = new Error("withdraw/idv-blocked: " + reason);
+    e.zhIdvBlocked = true;
+    e.zhIdvReason = reason;
+    return e;
+  }
+
   async function awaitRecipientOrPendingBlock() {
     // Match the recipient by DOM PRESENCE (querySelector), mirroring the original
     // waitForElement wait — it can mount before our isVisible heuristic considers
@@ -424,7 +447,11 @@
       if (document.querySelector(SEL.RECIPIENT_INPUT)) return;
       if (queryVisible(SEL.STEP_PREVIOUS_TRANSFER)) throw pendingTransferError(readPendingTransfer());
       if (isHoldModalPresent()) throw fundsNotAvailableError();
-      if (Date.now() >= deadline) throw new Error("withdraw/recipient-not-found: " + SEL.RECIPIENT_INPUT);
+      if (Date.now() >= deadline) {
+        var idvReason = await idvBlockedReasonFromDom();
+        if (idvReason) throw idvBlockedError(idvReason);
+        throw new Error("withdraw/recipient-not-found: " + SEL.RECIPIENT_INPUT);
+      }
       await D.sleep(150);
     }
   }
@@ -1658,6 +1685,8 @@
     // Drive Send → forms → preview → "Send now", then detect & return the 2FA state.
     start: async function (params) {
       try {
+        var idvReason = await idvBlockedReasonForAction("sends");
+        if (idvReason) throw idvBlockedError(idvReason);
         // Capture this send's commit response; drop any prior send's first.
         installCommitInterceptor();
         forgetCommittedSend();
@@ -1696,6 +1725,9 @@
         // specific rejection instead of the generic coin/no-next-screen error.
         if (e && e.zhAddressUnsupported) {
           return { state: "rejected", reason: "address_unsupported" };
+        }
+        if (e && e.zhIdvBlocked) {
+          return { state: "rejected", reason: e.zhIdvReason };
         }
         if (e && e.zhFundsNotAvailable) {
           return fundsNotAvailableRejection();
