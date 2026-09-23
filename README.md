@@ -50,7 +50,7 @@ Then add the dependency to your app's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("xyz.connect:connect-android:1.2.0")
+    implementation("xyz.connect:connect-android:1.2.1")
 }
 ```
 
@@ -58,7 +58,7 @@ Or with the Groovy DSL, in `build.gradle`:
 
 ```groovy
 dependencies {
-    implementation 'xyz.connect:connect-android:1.2.0'
+    implementation 'xyz.connect:connect-android:1.2.1'
 }
 ```
 
