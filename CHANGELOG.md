@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- When Coinbase shows its "temporarily unavailable" screen, a withdrawal is rejected
+  as `send_unavailable` (only before Send now) and `getDepositAddress` fails with
+  `RECEIVE_UNAVAILABLE`, instead of timing out (AUTH-4657).
+
 ## [1.2.1] - 2026-09-23
 
 ### Fixed
